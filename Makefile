@@ -20,3 +20,9 @@ plantuml-docker:
 plantuml:
 	plantuml docs/*.pu
 
+up:
+	docker compose up -d
+
+down:
+	docker compose down --remove-orphans
+
