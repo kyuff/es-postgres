@@ -1,0 +1,6 @@
+github.com/gofrs/uuid/v5 v5.3.2 h1:2jfO8j3XgSwlz/wHqemAEugfnTlikAYHhnqQ8Xh4fE0=
+github.com/gofrs/uuid/v5 v5.3.2/go.mod h1:CDOjlDMVAtN56jqyRUZh58JT31Tiw7/oQyEXZV+9bD8=
+github.com/kyuff/es v0.0.0-20250723073749-041fbb01392e h1:zJCO/DaYYae0375ia7GgcrRd1n6CNZFBheqLxyu337E=
+github.com/kyuff/es v0.0.0-20250723073749-041fbb01392e/go.mod h1:oChimOz33uFf0fEF7Ag8q2oH4qCc65sHJ2BjKDZ642A=
+golang.org/x/sync v0.16.0 h1:ycBJEhp9p4vXvUZNszeOq0kGTPghopOL8q0fq3vstxw=
+golang.org/x/sync v0.16.0/go.mod h1:1dzgHSNfp02xaA81J2MS99Qcpr2w7fw1gpm99rleRqA=
