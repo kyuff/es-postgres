@@ -2,15 +2,21 @@ package database
 
 import (
 	"context"
+	"embed"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kyuff/es-postgres/internal/assert"
+	"github.com/kyuff/es-postgres/internal/database/migrate"
+	"github.com/kyuff/es-postgres/internal/database/schemas"
 
 	_ "github.com/jackc/pgx/v5"
 )
+
+//go:embed migrations/*.tmpl
+var migrations embed.FS
 
 func Connect(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	config, err := pgxpool.ParseConfig(dsn)
@@ -23,6 +29,16 @@ func Connect(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	config.MaxConnLifetime = time.Hour
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		return nil, err
+	}
+
+	schema, err := schemas.New(pool, "events")
+	if err != nil {
+		return nil, err
+	}
+
+	err = migrate.Migrate(ctx, schema, migrations)
 	if err != nil {
 		return nil, err
 	}
