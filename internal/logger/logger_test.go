@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/kyuff/es/internal/assert"
-	"github.com/kyuff/es/internal/logger"
+	"github.com/kyuff/es-postgres/internal/assert"
+	"github.com/kyuff/es-postgres/internal/logger"
 )
 
 func TestSlog(t *testing.T) {

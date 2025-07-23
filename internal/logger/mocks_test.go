@@ -5,7 +5,7 @@ package logger_test
 
 import (
 	"context"
-	"github.com/kyuff/es/internal/logger"
+	"github.com/kyuff/es-postgres/internal/logger"
 	"log/slog"
 	"sync"
 )
