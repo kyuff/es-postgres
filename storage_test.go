@@ -9,8 +9,6 @@ import (
 )
 
 func TestStorage(t *testing.T) {
-	t.Skipf("Skipping test %s, requires a running PostgreSQL instance", t.Name())
-
 	t.Run("should create a new storage", func(t *testing.T) {
 		// arrange
 		var (
