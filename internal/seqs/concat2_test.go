@@ -4,8 +4,8 @@ import (
 	"iter"
 	"testing"
 
-	"github.com/kyuff/es/internal/assert"
-	"github.com/kyuff/es/internal/seqs"
+	"github.com/kyuff/es-postgres/internal/assert"
+	"github.com/kyuff/es-postgres/internal/seqs"
 )
 
 func TestConcat2(t *testing.T) {

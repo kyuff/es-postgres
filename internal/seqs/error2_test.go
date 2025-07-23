@@ -3,8 +3,8 @@ package seqs_test
 import (
 	"testing"
 
-	"github.com/kyuff/es/internal/assert"
-	"github.com/kyuff/es/internal/seqs"
+	"github.com/kyuff/es-postgres/internal/assert"
+	"github.com/kyuff/es-postgres/internal/seqs"
 )
 
 func TestError2(t *testing.T) {
