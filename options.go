@@ -3,30 +3,32 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"regexp"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/kyuff/es-postgres/internal/database"
 	"github.com/kyuff/es-postgres/internal/logger"
 )
 
 type Config struct {
-	logger    Logger
-	poolNew   func(ctx context.Context) (*pgxpool.Pool, error)
-	poolClose func() error
-	startCtx  func() context.Context
+	logger      Logger
+	startCtx    func() context.Context
+	tablePrefix string
 }
+
+var tablePrefixRE = regexp.MustCompile(`^[a-z][a-z0-9]{1,20}$`)
 
 func (c *Config) validate() error {
 	if c.logger == nil {
 		return errors.New("missing logger")
 	}
-	if c.poolNew == nil {
-		return errors.New("missing connection pool")
-	}
 
 	if c.startCtx == nil {
 		return errors.New("missing start context")
+	}
+
+	if !tablePrefixRE.MatchString(c.tablePrefix) {
+		return fmt.Errorf("invalid table prefix %q, must match: %s", c.tablePrefix, tablePrefixRE.String())
 	}
 
 	return nil
@@ -44,6 +46,7 @@ func defaultOptions() *Config {
 		// add default options here
 		WithNoopLogger(),
 		WithStartContext(context.Background()),
+		WithTablePrefix("es"),
 	)
 
 }
@@ -75,34 +78,21 @@ func WithSlog(log *slog.Logger) Option {
 	)
 }
 
-// WithDSN creates a Postgresql connection pool using the provided DSN.
-// The connection pool is closed by the Storage.
-func WithDSN(dsn string) Option {
-	return func(opt *Config) {
-		opt.poolNew = func(ctx context.Context) (*pgxpool.Pool, error) {
-			return database.Connect(ctx, dsn)
-		}
-	}
-}
-
-// WithPool uses an existing pgxpool.Pool instance.
-// It is up to the caller to manage the lifecycle of the pool.
-func WithPool(pool *pgxpool.Pool) Option {
-	return func(opt *Config) {
-		opt.poolNew = func(ctx context.Context) (*pgxpool.Pool, error) {
-			return pool, nil
-		}
-		opt.poolClose = func() error {
-			return nil
-		}
-	}
-}
-
 // WithStartContext uses the provided context during initialization.
 func WithStartContext(ctx context.Context) Option {
 	return func(opt *Config) {
 		opt.startCtx = func() context.Context {
 			return ctx
 		}
+	}
+}
+
+// WithTablePrefix uses the given prefix for the database tables
+// that this library creates.
+// Table names will have the form "{prefix}_{name}".
+// Example: "es_migrations"
+func WithTablePrefix(prefix string) Option {
+	return func(cfg *Config) {
+		cfg.tablePrefix = prefix
 	}
 }

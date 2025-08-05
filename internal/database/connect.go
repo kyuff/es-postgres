@@ -2,8 +2,8 @@ package database
 
 import (
 	"context"
-	"embed"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,9 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kyuff/es-postgres/internal/assert"
 )
-
-//go:embed migrations/*.tmpl
-var migrations embed.FS
 
 func Connect(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	config, err := pgxpool.ParseConfig(dsn)
@@ -38,10 +35,10 @@ func Connect(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
-func ConnectTest(t *testing.T) *pgxpool.Pool {
+func DSNTest(t *testing.T) string {
 	t.Helper()
 	var name = schemaName(t.Name())
-	var dsn = fmt.Sprintf("postgres://es:es@localhost:5430/es?sslmode=disable&search_path=%s", name)
+	dsn := fmt.Sprintf("postgres://es:es@localhost:5430/es?sslmode=disable&search_path=%s", name)
 
 	pool, err := Connect(t.Context(), dsn)
 	if !assert.NoError(t, err) {
@@ -53,15 +50,29 @@ func ConnectTest(t *testing.T) *pgxpool.Pool {
 		t.FailNow()
 	}
 
-	schema, err := New(pool, "events")
-	if !assert.NoError(t, err) {
-		t.FailNow()
-	}
-	err = Migrate(t.Context(), schema, migrations)
-	if !assert.NoError(t, err) {
-		t.Logf("Failed migration")
-		t.FailNow()
+	pool.Close()
+
+	return dsn
+}
+
+func ToDSN(conn *pgxpool.Conn) string {
+	cfg := conn.Conn().Config()
+	sb := strings.Builder{}
+	_, _ = fmt.Fprintf(&sb, "%s:******@%s:%d/%s",
+		cfg.User,
+		cfg.Host,
+		cfg.Port,
+		cfg.Database,
+	)
+	if len(cfg.RuntimeParams) == 0 {
+		return sb.String()
 	}
 
-	return pool
+	sb.WriteString("?")
+
+	for key, value := range cfg.RuntimeParams {
+		sb.WriteString(fmt.Sprintf("&%s=%s", key, value))
+	}
+
+	return sb.String()
 }

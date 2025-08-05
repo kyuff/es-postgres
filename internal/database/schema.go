@@ -3,8 +3,6 @@ package database
 import (
 	"context"
 	"fmt"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var sql = sqlQueries{}
@@ -17,7 +15,7 @@ type sqlQueries struct {
 	insertMigrationRow     string
 }
 
-func New(pool *pgxpool.Pool, prefix string) (*Schema, error) {
+func NewSchema(prefix string) (*Schema, error) {
 	err := renderTemplates(prefix,
 		&sql.selectCurrentMigration,
 		&sql.advisoryLock,
@@ -31,18 +29,11 @@ func New(pool *pgxpool.Pool, prefix string) (*Schema, error) {
 
 	return &Schema{
 		Prefix: prefix,
-		pool:   pool,
 	}, nil
 }
 
 type Schema struct {
 	Prefix string
-	pool   *pgxpool.Pool
-}
-
-func (s *Schema) Exec(ctx context.Context, query string, args ...any) error {
-	_, err := s.pool.Exec(ctx, query, args...)
-	return err
 }
 
 func init() {
@@ -52,12 +43,12 @@ FROM {{ .Prefix }}_migrations;
 `
 }
 
-func (s *Schema) SelectCurrentMigration(ctx context.Context) (uint32, error) {
-	row := s.pool.QueryRow(ctx, sql.selectCurrentMigration)
+func (s *Schema) SelectCurrentMigration(ctx context.Context, db DBTX) (uint32, error) {
+	row := db.QueryRow(ctx, sql.selectCurrentMigration)
 	var current uint32
 	err := row.Scan(&current)
 	if err != nil {
-		return current, fmt.Errorf("[es/postgres] Select current migration version: %w", err)
+		return current, fmt.Errorf("select current migration version: %w", err)
 	}
 
 	return current, nil
@@ -67,10 +58,10 @@ func init() {
 	sql.advisoryLock = "SELECT pg_advisory_lock($1);"
 }
 
-func (s *Schema) AdvisoryLock(ctx context.Context, pid int) error {
-	_, err := s.pool.Exec(ctx, sql.advisoryLock, pid)
+func (s *Schema) AdvisoryLock(ctx context.Context, db DBTX, pid int) error {
+	_, err := db.Exec(ctx, sql.advisoryLock, pid)
 	if err != nil {
-		return fmt.Errorf("[es/postgres] Advisory lock %d failed: %w", pid, err)
+		return fmt.Errorf("advisory lock %d failed: %w", pid, err)
 	}
 
 	return nil
@@ -80,10 +71,10 @@ func init() {
 	sql.advisoryUnlock = "SELECT pg_advisory_unlock($1);"
 }
 
-func (s *Schema) AdvisoryUnlock(ctx context.Context, pid int) error {
-	_, err := s.pool.Exec(ctx, sql.advisoryUnlock, pid)
+func (s *Schema) AdvisoryUnlock(ctx context.Context, db DBTX, pid int) error {
+	_, err := db.Exec(ctx, sql.advisoryUnlock, pid)
 	if err != nil {
-		return fmt.Errorf("[es/postgres] Advisory unlock %d failed: %w", pid, err)
+		return fmt.Errorf("advisory unlock %d failed: %w", pid, err)
 	}
 
 	return nil
@@ -102,10 +93,10 @@ CREATE TABLE IF NOT EXISTS {{ .Prefix }}_migrations
 `
 }
 
-func (s *Schema) CreateMigrationTable(ctx context.Context) error {
-	_, err := s.pool.Exec(ctx, sql.createMigrationTable)
+func (s *Schema) CreateMigrationTable(ctx context.Context, db DBTX) error {
+	_, err := db.Exec(ctx, sql.createMigrationTable)
 	if err != nil {
-		return fmt.Errorf("[es/postgres] Create Migration Table failed: %w", err)
+		return fmt.Errorf("create migration Table failed: %w", err)
 	}
 
 	return nil
@@ -119,10 +110,10 @@ ON CONFLICT DO NOTHING;
 `
 }
 
-func (s *Schema) InsertMigrationRow(ctx context.Context, version uint32, name string, hash string) error {
-	_, err := s.pool.Exec(ctx, sql.insertMigrationRow, version, name, hash)
+func (s *Schema) InsertMigrationRow(ctx context.Context, db DBTX, version uint32, name string, hash string) error {
+	_, err := db.Exec(ctx, sql.insertMigrationRow, version, name, hash)
 	if err != nil {
-		return fmt.Errorf("[es/postgres] Insert Migration row failed: %w", err)
+		return fmt.Errorf("insert Migration row failed: %w", err)
 	}
 
 	return nil
