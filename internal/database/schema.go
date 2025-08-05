@@ -3,6 +3,8 @@ package database
 import (
 	"context"
 	"fmt"
+
+	"github.com/jackc/pgx/v5"
 )
 
 var sql = sqlQueries{}
@@ -13,6 +15,7 @@ type sqlQueries struct {
 	advisoryUnlock         string
 	createMigrationTable   string
 	insertMigrationRow     string
+	selectEvents           string
 }
 
 func NewSchema(prefix string) (*Schema, error) {
@@ -22,6 +25,7 @@ func NewSchema(prefix string) (*Schema, error) {
 		&sql.advisoryUnlock,
 		&sql.createMigrationTable,
 		&sql.insertMigrationRow,
+		&sql.selectEvents,
 	)
 	if err != nil {
 		return nil, err
@@ -117,4 +121,33 @@ func (s *Schema) InsertMigrationRow(ctx context.Context, db DBTX, version uint32
 	}
 
 	return nil
+}
+
+func init() {
+	sql.selectEvents = `
+SELECT  stream_type,
+        stream_id,
+		event_number,
+		event_time,
+		store_event_id,
+		store_stream_id,
+		content_name,
+		content,
+		metadata
+FROM {{ .Prefix }}_events
+WHERE 
+        stream_type = $1
+    AND stream_id = $2
+    AND event_number > $3
+ORDER BY event_number ASC
+`
+}
+
+func (s *Schema) SelectEvents(ctx context.Context, db DBTX, streamType string, streamID string, eventNumber int64) (pgx.Rows, error) {
+	rows, err := db.Query(ctx, sql.selectEvents, streamType, streamID, eventNumber)
+	if err != nil {
+		return nil, err
+	}
+
+	return rows, nil
 }

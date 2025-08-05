@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS {{ .Prefix }}_events
     event_time      timestamp with time zone    NOT NULL,
     store_event_id  uuid                        NOT NULL,
     store_stream_id uuid                        NOT NULL,
+    content_name    VARCHAR                     NOT NULL,
     content         jsonb                       NOT NULL,
     metadata        jsonb                       NOT NULL,
 CONSTRAINT {{ .Prefix }}_events_pkey PRIMARY KEY (stream_type, stream_id, event_number)
