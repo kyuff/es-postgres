@@ -132,6 +132,17 @@ func NoError(t *testing.T, got error) bool {
 	return true
 }
 
+func MustNoError[T any](t *testing.T, fn func() (T, error)) T {
+	t.Helper()
+
+	typ, err := fn()
+	if !NoError(t, err) {
+		t.FailNow()
+	}
+
+	return typ
+}
+
 func Error(t *testing.T, got error) bool {
 	t.Helper()
 	if got == nil {
