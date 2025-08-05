@@ -17,6 +17,9 @@ type Connector interface {
 	// Close must free all underlying resources
 	Close() error
 
+	// AcquireRead supplies a connection used to read
+	AcquireRead(ctx context.Context) (*pgxpool.Conn, error)
+
 	// isConnector is a marker to enforce package implementations for now.
 	isConnector()
 }
@@ -54,6 +57,10 @@ func (i *Instance) Ping(ctx context.Context) error {
 
 func (i *Instance) ApplyMigrations(ctx context.Context, apply func(conn *pgxpool.Conn) error) error {
 	return i.pool.AcquireFunc(ctx, apply)
+}
+
+func (i *Instance) AcquireRead(ctx context.Context) (*pgxpool.Conn, error) {
+	return i.pool.Acquire(ctx)
 }
 
 func (i *Instance) Close() error {
