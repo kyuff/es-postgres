@@ -1,0 +1,12 @@
+CREATE TABLE IF NOT EXISTS {{ .Prefix }}_events
+(
+    stream_type     VARCHAR                     NOT NULL,
+    stream_id       VARCHAR                     NOT NULL,
+    event_number    BIGINT                      NOT NULL,
+    event_time      timestamp with time zone    NOT NULL,
+    store_event_id  uuid                        NOT NULL,
+    store_stream_id uuid                        NOT NULL,
+    content         jsonb                       NOT NULL,
+    metadata        jsonb                       NOT NULL,
+CONSTRAINT {{ .Prefix }}_events_pkey PRIMARY KEY (stream_type, stream_id, event_number)
+);
