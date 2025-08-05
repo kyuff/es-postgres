@@ -8,12 +8,14 @@ import (
 	"regexp"
 
 	"github.com/kyuff/es-postgres/internal/logger"
+	"github.com/kyuff/es/codecs"
 )
 
 type Config struct {
 	logger      Logger
 	startCtx    func() context.Context
 	tablePrefix string
+	codec       codec
 }
 
 var tablePrefixRE = regexp.MustCompile(`^[a-z][a-z0-9]{1,20}$`)
@@ -29,6 +31,10 @@ func (c *Config) validate() error {
 
 	if !tablePrefixRE.MatchString(c.tablePrefix) {
 		return fmt.Errorf("invalid table prefix %q, must match: %s", c.tablePrefix, tablePrefixRE.String())
+	}
+
+	if c.codec == nil {
+		return errors.New("missing codec")
 	}
 
 	return nil
@@ -47,6 +53,7 @@ func defaultOptions() *Config {
 		WithNoopLogger(),
 		WithStartContext(context.Background()),
 		WithTablePrefix("es"),
+		withJsonCodec(),
 	)
 
 }
@@ -94,5 +101,13 @@ func WithStartContext(ctx context.Context) Option {
 func WithTablePrefix(prefix string) Option {
 	return func(cfg *Config) {
 		cfg.tablePrefix = prefix
+	}
+}
+
+// withJsonCodec determines how data is stored in the database.
+// It is kept private for now, as the underlying postgres column type is jsonb.
+func withJsonCodec() Option {
+	return func(cfg *Config) {
+		cfg.codec = codecs.NewJSON()
 	}
 }

@@ -72,8 +72,7 @@ func (s *Storage) StartPublish(ctx context.Context, w es.Writer) error {
 }
 
 func (s *Storage) Register(streamType string, types ...es.Content) error {
-	//TODO implement me
-	panic("implement me")
+	return s.cfg.codec.Register(streamType, types...)
 }
 
 func (s *Storage) GetStreamIDs(ctx context.Context, streamType string, storeStreamID string, limit int64) ([]string, string, error) {
