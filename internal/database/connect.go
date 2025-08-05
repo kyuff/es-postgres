@@ -2,15 +2,18 @@ package database
 
 import (
 	"context"
+	"embed"
 	"fmt"
 	"testing"
 	"time"
 
+	_ "github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kyuff/es-postgres/internal/assert"
-
-	_ "github.com/jackc/pgx/v5"
 )
+
+//go:embed migrations/*.tmpl
+var migrations embed.FS
 
 func Connect(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	config, err := pgxpool.ParseConfig(dsn)
@@ -37,20 +40,28 @@ func Connect(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 
 func ConnectTest(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	var schema = schemaName(t.Name())
-	var dsn = fmt.Sprintf("postgres://es:es@localhost:5430/es?sslmode=disable&search_path=%s", schema)
+	var name = schemaName(t.Name())
+	var dsn = fmt.Sprintf("postgres://es:es@localhost:5430/es?sslmode=disable&search_path=%s", name)
 
 	pool, err := Connect(t.Context(), dsn)
 	if !assert.NoError(t, err) {
 		t.FailNow()
 	}
 
-	_, err = pool.Exec(t.Context(), fmt.Sprintf(`CREATE SCHEMA IF NOT EXISTS "%s"`, schema))
+	_, err = pool.Exec(t.Context(), fmt.Sprintf(`CREATE SCHEMA IF NOT EXISTS "%s"`, name))
 	if !assert.NoError(t, err) {
 		t.FailNow()
 	}
 
-	t.Logf("Using schema: %s", schema)
+	schema, err := New(pool, "events")
+	if !assert.NoError(t, err) {
+		t.FailNow()
+	}
+	err = Migrate(t.Context(), schema, migrations)
+	if !assert.NoError(t, err) {
+		t.Logf("Failed migration")
+		t.FailNow()
+	}
 
 	return pool
 }
