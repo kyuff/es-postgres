@@ -106,7 +106,8 @@ func (s *Storage) Read(ctx context.Context, streamType string, streamID string, 
 
 			event.Content, err = s.cfg.codec.Decode(event.StreamType, contentName, content)
 			if err != nil {
-				yield(es.Event{}, fmt.Errorf("[es/postgres] Failed to decode events for %s.%s [%d]: %w",
+				yield(es.Event{}, fmt.Errorf("[es/postgres] Failed to decode event %q for %s.%s [%d]: %w",
+					contentName,
 					streamType,
 					streamID,
 					eventNumber,
