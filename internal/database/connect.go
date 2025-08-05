@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,4 +53,26 @@ func DSNTest(t *testing.T) string {
 	pool.Close()
 
 	return dsn
+}
+
+func ToDSN(conn *pgxpool.Conn) string {
+	cfg := conn.Conn().Config()
+	sb := strings.Builder{}
+	_, _ = fmt.Fprintf(&sb, "%s:******@%s:%d/%s",
+		cfg.User,
+		cfg.Host,
+		cfg.Port,
+		cfg.Database,
+	)
+	if len(cfg.RuntimeParams) == 0 {
+		return sb.String()
+	}
+
+	sb.WriteString("?")
+
+	for key, value := range cfg.RuntimeParams {
+		sb.WriteString(fmt.Sprintf("&%s=%s", key, value))
+	}
+
+	return sb.String()
 }

@@ -48,7 +48,7 @@ func (s *Schema) SelectCurrentMigration(ctx context.Context, db DBTX) (uint32, e
 	var current uint32
 	err := row.Scan(&current)
 	if err != nil {
-		return current, fmt.Errorf("[es/postgres] Select current migration version: %w", err)
+		return current, fmt.Errorf("select current migration version: %w", err)
 	}
 
 	return current, nil
@@ -61,7 +61,7 @@ func init() {
 func (s *Schema) AdvisoryLock(ctx context.Context, db DBTX, pid int) error {
 	_, err := db.Exec(ctx, sql.advisoryLock, pid)
 	if err != nil {
-		return fmt.Errorf("[es/postgres] Advisory lock %d failed: %w", pid, err)
+		return fmt.Errorf("advisory lock %d failed: %w", pid, err)
 	}
 
 	return nil
@@ -74,7 +74,7 @@ func init() {
 func (s *Schema) AdvisoryUnlock(ctx context.Context, db DBTX, pid int) error {
 	_, err := db.Exec(ctx, sql.advisoryUnlock, pid)
 	if err != nil {
-		return fmt.Errorf("[es/postgres] Advisory unlock %d failed: %w", pid, err)
+		return fmt.Errorf("advisory unlock %d failed: %w", pid, err)
 	}
 
 	return nil
@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS {{ .Prefix }}_migrations
 func (s *Schema) CreateMigrationTable(ctx context.Context, db DBTX) error {
 	_, err := db.Exec(ctx, sql.createMigrationTable)
 	if err != nil {
-		return fmt.Errorf("[es/postgres] Create Migration Table failed: %w", err)
+		return fmt.Errorf("create migration Table failed: %w", err)
 	}
 
 	return nil
@@ -113,7 +113,7 @@ ON CONFLICT DO NOTHING;
 func (s *Schema) InsertMigrationRow(ctx context.Context, db DBTX, version uint32, name string, hash string) error {
 	_, err := db.Exec(ctx, sql.insertMigrationRow, version, name, hash)
 	if err != nil {
-		return fmt.Errorf("[es/postgres] Insert Migration row failed: %w", err)
+		return fmt.Errorf("insert Migration row failed: %w", err)
 	}
 
 	return nil

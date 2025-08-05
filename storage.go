@@ -30,7 +30,14 @@ func New(connector Connector, opts ...Option) (*Storage, error) {
 	}
 
 	err = connector.ApplyMigrations(ctx, func(conn *pgxpool.Conn) error {
-		return database.Migrate(ctx, conn, schema)
+		err := database.Migrate(ctx, conn, schema)
+		if err != nil {
+			cfg.logger.ErrorfCtx(ctx, "[es/postgres] Database migration failed for %q: %s", database.ToDSN(conn), err)
+			return err
+		}
+
+		cfg.logger.InfofCtx(ctx, "[es/postgres] Database migrated %q", database.ToDSN(conn))
+		return nil
 	})
 	if err != nil {
 		return nil, err

@@ -16,7 +16,7 @@ func TestStorage(t *testing.T) {
 		)
 
 		// act
-		storage, err := postgres.New(connector)
+		storage, err := postgres.New(connector, postgres.WithDefaultSlog())
 
 		// assert
 		assert.NoError(t, err)

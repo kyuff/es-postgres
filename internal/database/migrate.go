@@ -27,7 +27,7 @@ func Migrate(ctx context.Context, db DBTX, schema *Schema) error {
 		defer cancel()
 		err := schema.AdvisoryUnlock(unlockCtx, db, pid)
 		if err != nil {
-			slog.ErrorContext(unlockCtx, fmt.Sprintf("[es/postgres] Migration unlock failed: %s", err))
+			slog.ErrorContext(unlockCtx, fmt.Sprintf("migration unlock failed: %s", err))
 		}
 	}()
 
