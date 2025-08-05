@@ -9,14 +9,32 @@ import (
 )
 
 func TestStorage(t *testing.T) {
-	t.Run("should create a new storage", func(t *testing.T) {
+	t.Run("should create a new storage from dsn", func(t *testing.T) {
 		// arrange
 		var (
-			db = database.ConnectTest(t)
+			connector = postgres.InstanceFromDSN(database.DSNTest(t))
 		)
 
 		// act
-		storage, err := postgres.New(postgres.WithPool(db))
+		storage, err := postgres.New(connector)
+
+		// assert
+		assert.NoError(t, err)
+		assert.NotNil(t, storage)
+		assert.NoError(t, storage.Close())
+	})
+
+	t.Run("should create a new storage from pool", func(t *testing.T) {
+		// arrange
+		var (
+			dsn       = database.DSNTest(t)
+			pool, err = database.Connect(t.Context(), dsn)
+			_         = assert.NoError(t, err)
+			connector = postgres.InstanceFromPool(pool)
+		)
+
+		// act
+		storage, err := postgres.New(connector)
 
 		// assert
 		assert.NoError(t, err)

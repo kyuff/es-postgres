@@ -2,38 +2,41 @@ package database
 
 import (
 	"context"
+	"embed"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"time"
 )
 
-func Migrate(ctx context.Context, schema *Schema, fileSystem fs.FS) error {
-	migrations, err := parseSteps(fileSystem, schema.Prefix)
+//go:embed migrations/*.tmpl
+var migrations embed.FS
+
+func Migrate(ctx context.Context, db DBTX, schema *Schema) error {
+	migrations, err := parseSteps(migrations, schema.Prefix)
 	if err != nil {
 		return err
 	}
 
 	pid := calculateProcessID(schema.Prefix)
-	err = schema.AdvisoryLock(ctx, pid)
+	err = schema.AdvisoryLock(ctx, db, pid)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		unlockCtx, cancel := context.WithTimeout(context.Background(), time.Second*2)
 		defer cancel()
-		err := schema.AdvisoryUnlock(unlockCtx, pid)
+		err := schema.AdvisoryUnlock(unlockCtx, db, pid)
 		if err != nil {
 			slog.ErrorContext(unlockCtx, fmt.Sprintf("[es/postgres] Migration unlock failed: %s", err))
 		}
 	}()
 
-	err = schema.CreateMigrationTable(ctx)
+	err = schema.CreateMigrationTable(ctx, db)
 	if err != nil {
 		return err
 	}
 
-	currentVersion, err := schema.SelectCurrentMigration(ctx)
+	currentVersion, err := schema.SelectCurrentMigration(ctx, db)
 	if err != nil {
 		return err
 	}
@@ -54,12 +57,12 @@ func Migrate(ctx context.Context, schema *Schema, fileSystem fs.FS) error {
 			continue
 		}
 
-		err = schema.Exec(ctx, migration.ddl)
+		_, err = db.Exec(ctx, migration.ddl)
 		if err != nil {
 			return err
 		}
 
-		err = schema.InsertMigrationRow(ctx, migration.version, migration.fileName, migration.Hash())
+		err = schema.InsertMigrationRow(ctx, db, migration.version, migration.fileName, migration.Hash())
 		if err != nil {
 			return err
 		}

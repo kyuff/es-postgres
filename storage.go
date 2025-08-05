@@ -8,9 +8,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kyuff/es"
+	"github.com/kyuff/es-postgres/internal/database"
 )
 
-func New(opts ...Option) (*Storage, error) {
+func New(connector Connector, opts ...Option) (*Storage, error) {
 	cfg := applyOptions(defaultOptions(), opts...)
 	if err := cfg.validate(); err != nil {
 		return nil, fmt.Errorf("[es/postgres] invalid configuration: %w", err)
@@ -18,21 +19,34 @@ func New(opts ...Option) (*Storage, error) {
 
 	ctx := cfg.startCtx()
 
-	pool, err := cfg.poolNew(ctx)
+	err := connector.Ping(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("[es/postgres] failed connecting to database: %w", err)
+		return nil, err
+	}
+
+	schema, err := database.NewSchema(cfg.tablePrefix)
+	if err != nil {
+		return nil, err
+	}
+
+	err = connector.ApplyMigrations(ctx, func(conn *pgxpool.Conn) error {
+		return database.Migrate(ctx, conn, schema)
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return &Storage{
-		cfg:  cfg,
-		pool: pool,
+		cfg:       cfg,
+		connector: connector,
+		schema:    schema,
 	}, nil
 }
 
 type Storage struct {
-	conn *pgxpool.Pool
-	cfg  *Config
-	pool *pgxpool.Pool
+	cfg       *Config
+	connector Connector
+	schema    *database.Schema
 }
 
 func (s *Storage) Read(ctx context.Context, streamType string, streamID string, eventNumber int64) iter.Seq2[es.Event, error] {
@@ -62,6 +76,6 @@ func (s *Storage) GetStreamIDs(ctx context.Context, streamType string, storeStre
 
 func (s *Storage) Close() error {
 	return errors.Join(
-		s.cfg.poolClose(),
+		s.connector.Close(),
 	)
 }
