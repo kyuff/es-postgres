@@ -11,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kyuff/es"
 	"github.com/kyuff/es-postgres/internal/database"
+	"github.com/kyuff/es-postgres/internal/publish"
+	"golang.org/x/sync/errgroup"
 )
 
 func New(connector Connector, opts ...Option) (*Storage, error) {
@@ -49,13 +51,22 @@ func New(connector Connector, opts ...Option) (*Storage, error) {
 		cfg:       cfg,
 		connector: connector,
 		schema:    schema,
+		publishers: []publisher{
+			publish.NewDatabaseListener(),
+			publish.NewPeriodicChecker(),
+		},
 	}, nil
 }
 
+type publisher interface {
+	Publish(ctx context.Context, w es.Writer) error
+}
+
 type Storage struct {
-	cfg       *Config
-	connector Connector
-	schema    *database.Schema
+	cfg        *Config
+	connector  Connector
+	schema     *database.Schema
+	publishers []publisher
 }
 
 func (s *Storage) Read(ctx context.Context, streamType string, streamID string, eventNumber int64) iter.Seq2[es.Event, error] {
@@ -207,8 +218,15 @@ func (s *Storage) writeEvents(ctx context.Context, tx database.DBTX, streamType 
 }
 
 func (s *Storage) StartPublish(ctx context.Context, w es.Writer) error {
-	//TODO implement me
-	panic("implement me")
+	g, publishCtx := errgroup.WithContext(ctx)
+
+	for _, publisher := range s.publishers {
+		g.Go(func() error {
+			return publisher.Publish(publishCtx, w)
+		})
+	}
+
+	return g.Wait()
 }
 
 func (s *Storage) Register(streamType string, types ...es.Content) error {
