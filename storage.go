@@ -124,8 +124,62 @@ func (s *Storage) Read(ctx context.Context, streamType string, streamID string, 
 }
 
 func (s *Storage) Write(ctx context.Context, streamType string, events iter.Seq2[es.Event, error]) error {
-	//TODO implement me
-	panic("implement me")
+	conn, err := s.connector.AcquireWrite(ctx)
+	if err != nil {
+		return fmt.Errorf("[es/postgres] Failed to acquire write connection: %w", err)
+	}
+	defer conn.Release()
+
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("[es/postgres] Failed to begin transaction: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	var (
+		first         = true
+		storeStreamID string
+		streamID      string
+		eventNumber   int64
+	)
+
+	for event, err := range events {
+		if err != nil {
+			return fmt.Errorf("[es/postgres] Range over events to be written failed: %w", err)
+		}
+
+		if first {
+			first = false
+			storeStreamID = event.StoreStreamID
+			streamID = event.StreamID
+			eventNumber = event.EventNumber - 1
+		}
+
+		if event.StreamType != streamType {
+			return fmt.Errorf("[es/postgres] Invalid stream type: %q", event.StreamType)
+		}
+		if event.StoreStreamID != storeStreamID {
+			return fmt.Errorf("[es/postgres] Invalid store stream id: %q / %q", event.StoreStreamID, storeStreamID)
+		}
+		if event.StreamID != streamID {
+			return fmt.Errorf("[es/postgres] Invalid stream id: %q", event.StreamID)
+		}
+
+		if eventNumber+1 != event.EventNumber {
+			return fmt.Errorf("[es/postgres] Invalid event number, expected %d, got %d", eventNumber, event.EventNumber)
+		}
+
+		eventNumber = event.EventNumber
+
+		err = s.schema.WriteEvent(ctx, tx, event)
+		if err != nil {
+			return fmt.Errorf("[es/postgres] Failed to write event: %w", err)
+		}
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (s *Storage) StartPublish(ctx context.Context, w es.Writer) error {
