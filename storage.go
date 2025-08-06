@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kyuff/es"
@@ -215,8 +216,22 @@ func (s *Storage) Register(streamType string, types ...es.Content) error {
 }
 
 func (s *Storage) GetStreamIDs(ctx context.Context, streamType string, storeStreamID string, limit int64) ([]string, string, error) {
-	//TODO implement me
-	panic("implement me")
+	db, err := s.connector.AcquireRead(ctx)
+	if err != nil {
+		return nil, "", fmt.Errorf("[es/postgres] Failed to acquire read connection: %w", err)
+	}
+	defer db.Release()
+
+	if strings.TrimSpace(storeStreamID) == "" {
+		storeStreamID = "00000000-0000-0000-0000-000000000000"
+	}
+
+	streamIDs, nextToken, err := s.schema.SelectStreamIDs(ctx, db, streamType, storeStreamID, limit)
+	if err != nil {
+		return nil, "", fmt.Errorf("[es/postgres] Failed to read store stream ids: %w", err)
+	}
+
+	return streamIDs, nextToken, nil
 }
 
 func (s *Storage) Close() error {
