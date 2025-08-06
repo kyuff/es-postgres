@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kyuff/es"
 	"github.com/kyuff/es-postgres/internal/database"
-	"github.com/kyuff/es-postgres/internal/publish"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -47,26 +46,28 @@ func New(connector Connector, opts ...Option) (*Storage, error) {
 		return nil, err
 	}
 
+	valuer := newFixedSizeValuer(128) // TODO Option for size
+
 	return &Storage{
 		cfg:       cfg,
 		connector: connector,
 		schema:    schema,
-		publishers: []publisher{
-			publish.NewDatabaseListener(),
-			publish.NewPeriodicChecker(),
+		reconciles: []reconcile{
+			newReconcileListener(),
+			newReconcilePeriodic(cfg, connector, schema, valuer),
 		},
 	}, nil
 }
 
-type publisher interface {
-	Publish(ctx context.Context, w es.Writer) error
+type reconcile interface {
+	Reconcile(ctx context.Context, p processor) error
 }
 
 type Storage struct {
 	cfg        *Config
 	connector  Connector
 	schema     *database.Schema
-	publishers []publisher
+	reconciles []reconcile
 }
 
 func (s *Storage) Read(ctx context.Context, streamType string, streamID string, eventNumber int64) iter.Seq2[es.Event, error] {
@@ -220,9 +221,10 @@ func (s *Storage) writeEvents(ctx context.Context, tx database.DBTX, streamType 
 func (s *Storage) StartPublish(ctx context.Context, w es.Writer) error {
 	g, publishCtx := errgroup.WithContext(ctx)
 
-	for _, publisher := range s.publishers {
+	p := newProcessWriter(w)
+	for _, r := range s.reconciles {
 		g.Go(func() error {
-			return publisher.Publish(publishCtx, w)
+			return r.Reconcile(publishCtx, p)
 		})
 	}
 

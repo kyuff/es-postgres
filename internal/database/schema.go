@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/kyuff/es"
@@ -265,4 +266,8 @@ func (s *Schema) SelectStreamIDs(ctx context.Context, db DBTX, streamType string
 	}
 
 	return result, nextToken, nil
+}
+
+func (s *Schema) SelectOutboxStreamIDs(ctx context.Context, db DBTX, graceWindow time.Duration, partitions []uint32) ([]Stream, error) {
+	return nil, nil
 }
