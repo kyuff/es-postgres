@@ -184,7 +184,7 @@ func (s *Storage) writeEvents(ctx context.Context, tx database.DBTX, streamType 
 			lastEvent.StoreStreamID,
 			lastEvent.EventNumber,
 			firstEvent.EventNumber-1,
-			0, // TODO add partitioner
+			s.cfg.partitioner(streamType, lastEvent.StreamID),
 		)
 	} else {
 		affected, err = s.schema.UpdateOutbox(ctx, tx,

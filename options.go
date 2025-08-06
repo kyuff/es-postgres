@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"regexp"
 
+	"github.com/kyuff/es-postgres/internal/hash"
 	"github.com/kyuff/es-postgres/internal/logger"
 	"github.com/kyuff/es/codecs"
 )
@@ -16,6 +17,7 @@ type Config struct {
 	startCtx    func() context.Context
 	tablePrefix string
 	codec       codec
+	partitioner func(streamType, streamID string) uint32
 }
 
 var tablePrefixRE = regexp.MustCompile(`^[a-z][a-z0-9]{1,20}$`)
@@ -54,6 +56,7 @@ func defaultOptions() *Config {
 		WithStartContext(context.Background()),
 		WithTablePrefix("es"),
 		withJsonCodec(),
+		WithFNVPartitioner(128),
 	)
 
 }
@@ -110,4 +113,16 @@ func withJsonCodec() Option {
 	return func(cfg *Config) {
 		cfg.codec = codecs.NewJSON()
 	}
+}
+
+func WithPartitioner(partitioner func(streamType, streamID string) uint32) Option {
+	return func(cfg *Config) {
+		cfg.partitioner = partitioner
+	}
+}
+
+func WithFNVPartitioner(partitionCount uint32) Option {
+	return WithPartitioner(func(streamType, streamID string) uint32 {
+		return hash.FNV(streamType+streamID, partitionCount)
+	})
 }
