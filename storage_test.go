@@ -31,18 +31,19 @@ func (e EventB) EventName() string {
 	return "EventB"
 }
 
+var newInstance = func(t *testing.T, opts ...postgres.Option) *postgres.Storage {
+	t.Helper()
+	storage, err := postgres.New(postgres.InstanceFromDSN(database.DSNTest(t)), opts...)
+	if err != nil {
+		t.Logf("Failed creating storage: %s", err)
+		t.FailNow()
+	}
+
+	return storage
+}
+
 func TestStorage(t *testing.T) {
 	var (
-		newStorage = func(t *testing.T) es.Storage {
-			t.Helper()
-			storage, err := postgres.New(postgres.InstanceFromDSN(database.DSNTest(t)))
-			if assert.NoError(t, err) {
-				return storage
-			}
-
-			t.FailNow()
-			return nil
-		}
 		newStreamType = uuid.V7
 		newStreamID   = uuid.V7
 		newEvent      = func(eventNumber int64, mods ...func(e *es.Event)) es.Event {
@@ -94,250 +95,258 @@ func TestStorage(t *testing.T) {
 			}
 		}
 	)
-	t.Run("should create a new storage from dsn", func(t *testing.T) {
-		// arrange
-		var (
-			connector = postgres.InstanceFromDSN(database.DSNTest(t))
-		)
+	t.Run("Instance", func(t *testing.T) {
+		t.Run("should create a new storage from dsn", func(t *testing.T) {
+			// arrange
+			var (
+				connector = postgres.InstanceFromDSN(database.DSNTest(t))
+			)
 
-		// act
-		storage, err := postgres.New(connector)
+			// act
+			storage, err := postgres.New(connector)
 
-		// assert
-		assert.NoError(t, err)
-		assert.NotNil(t, storage)
-		assert.NoError(t, storage.Close())
-	})
+			// assert
+			assert.NoError(t, err)
+			assert.NotNil(t, storage)
+			assert.NoError(t, storage.Close())
+		})
 
-	t.Run("should create a new storage from pool", func(t *testing.T) {
-		// arrange
-		var (
-			dsn  = database.DSNTest(t)
-			pool = assert.MustNoError(t, func() (*pgxpool.Pool, error) {
-				return database.Connect(t.Context(), dsn)
-			})
-			connector = postgres.InstanceFromPool(pool)
-		)
+		t.Run("should create a new storage from pool", func(t *testing.T) {
+			// arrange
+			var (
+				dsn  = database.DSNTest(t)
+				pool = assert.MustNoError(t, func() (*pgxpool.Pool, error) {
+					return database.Connect(t.Context(), dsn)
+				})
+				connector = postgres.InstanceFromPool(pool)
+			)
 
-		// act
-		storage, err := postgres.New(connector)
+			// act
+			storage, err := postgres.New(connector)
 
-		// assert
-		assert.NoError(t, err)
-		assert.NotNil(t, storage)
-		assert.NoError(t, storage.Close())
-	})
-
-	t.Run("should register event types", func(t *testing.T) {
-		// arrange
-		var (
-			storage    = newStorage(t)
-			streamType = newStreamType()
-		)
-
-		// act
-		err := storage.Register(streamType, EventA{}, EventB{})
-
-		// assert
-		assert.NoError(t, err)
-	})
-
-	t.Run("should read no events", func(t *testing.T) {
-		// arrange
-		var (
-			storage    = newStorage(t)
-			streamType = newStreamType()
-			streamID   = newStreamID()
-		)
-
-		// act
-		got := storage.Read(t.Context(), streamType, streamID, 0)
-
-		// assert
-		assert.EqualSeq2(t, seqs.EmptySeq2[es.Event, error](), got, func(expected, got assert.KeyValue[es.Event, error]) bool {
-			return false
+			// assert
+			assert.NoError(t, err)
+			assert.NotNil(t, storage)
+			assert.NoError(t, storage.Close())
 		})
 	})
 
-	t.Run("should write and read events", func(t *testing.T) {
-		// arrange
-		var (
-			storage    = newStorage(t)
-			streamType = newStreamType()
-			streamID   = newStreamID()
-			events     = newEvents(streamType, streamID, 10)
-		)
+	t.Run("Register", func(t *testing.T) {
+		t.Run("should register event types", func(t *testing.T) {
+			// arrange
+			var (
+				storage    = newInstance(t)
+				streamType = newStreamType()
+			)
 
-		assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
-		assert.NoError(t, storage.Write(t.Context(), streamType, seqs.Seq2(events...)))
+			// act
+			err := storage.Register(streamType, EventA{}, EventB{})
 
-		// act
-		got := storage.Read(t.Context(), streamType, streamID, 0)
-
-		// assert
-		assert.EqualSeq2(t, seqs.Seq2(events...), got, eventsEqual(t))
+			// assert
+			assert.NoError(t, err)
+		})
 	})
 
-	t.Run("should support optimistic locks by failing if event_number already written", func(t *testing.T) {
-		// arrange
-		var (
-			storage    = newStorage(t)
-			streamType = newStreamType()
-			streamID   = newStreamID()
-			events     = newEvents(streamType, streamID, 10)
-		)
+	t.Run("Read/Write", func(t *testing.T) {
+		t.Run("should read no events", func(t *testing.T) {
+			// arrange
+			var (
+				storage    = newInstance(t)
+				streamType = newStreamType()
+				streamID   = newStreamID()
+			)
 
-		assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
-		assert.NoError(t, storage.Write(t.Context(), streamType, seqs.Seq2(events[0:5]...)))
+			// act
+			got := storage.Read(t.Context(), streamType, streamID, 0)
 
-		// act
-		err := storage.Write(t.Context(), streamType, seqs.Seq2(events[2:]...))
+			// assert
+			assert.EqualSeq2(t, seqs.EmptySeq2[es.Event, error](), got, func(expected, got assert.KeyValue[es.Event, error]) bool {
+				return false
+			})
+		})
 
-		// assert
-		assert.Error(t, err)
-		assert.EqualSeq2(t,
-			seqs.Seq2(events[0:5]...),
-			storage.Read(t.Context(), streamType, streamID, 0),
-			eventsEqual(t))
+		t.Run("should write and read events", func(t *testing.T) {
+			// arrange
+			var (
+				storage    = newInstance(t)
+				streamType = newStreamType()
+				streamID   = newStreamID()
+				events     = newEvents(streamType, streamID, 10)
+			)
+
+			assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
+			assert.NoError(t, storage.Write(t.Context(), streamType, seqs.Seq2(events...)))
+
+			// act
+			got := storage.Read(t.Context(), streamType, streamID, 0)
+
+			// assert
+			assert.EqualSeq2(t, seqs.Seq2(events...), got, eventsEqual(t))
+		})
+
+		t.Run("should support optimistic locks by failing if event_number already written", func(t *testing.T) {
+			// arrange
+			var (
+				storage    = newInstance(t)
+				streamType = newStreamType()
+				streamID   = newStreamID()
+				events     = newEvents(streamType, streamID, 10)
+			)
+
+			assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
+			assert.NoError(t, storage.Write(t.Context(), streamType, seqs.Seq2(events[0:5]...)))
+
+			// act
+			err := storage.Write(t.Context(), streamType, seqs.Seq2(events[2:]...))
+
+			// assert
+			assert.Error(t, err)
+			assert.EqualSeq2(t,
+				seqs.Seq2(events[0:5]...),
+				storage.Read(t.Context(), streamType, streamID, 0),
+				eventsEqual(t))
+		})
+
+		t.Run("should support optimistic locks by failing if event_number too high", func(t *testing.T) {
+			// arrange
+			var (
+				storage    = newInstance(t)
+				streamType = newStreamType()
+				streamID   = newStreamID()
+				events     = newEvents(streamType, streamID, 10)
+			)
+
+			assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
+			assert.NoError(t, storage.Write(t.Context(), streamType, seqs.Seq2(events[0:3]...)))
+
+			// act
+			err := storage.Write(t.Context(), streamType, seqs.Seq2(events[7:]...))
+
+			// assert
+			assert.Error(t, err)
+			assert.EqualSeq2(t,
+				seqs.Seq2(events[0:3]...),
+				storage.Read(t.Context(), streamType, streamID, 0),
+				eventsEqual(t))
+		})
 	})
 
-	t.Run("should support optimistic locks by failing if event_number too high", func(t *testing.T) {
-		// arrange
-		var (
-			storage    = newStorage(t)
-			streamType = newStreamType()
-			streamID   = newStreamID()
-			events     = newEvents(streamType, streamID, 10)
-		)
+	t.Run("GetStreamIDs", func(t *testing.T) {
+		t.Run("should read a list of stream ids", func(t *testing.T) {
+			// arrange
+			var (
+				storage        = newInstance(t)
+				streamType     = newStreamType()
+				count          = 10
+				streamIDs      = uuid.V7At(time.Now(), count)
+				storeStreamIDs = uuid.V7At(time.Now(), count)
+			)
 
-		assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
-		assert.NoError(t, storage.Write(t.Context(), streamType, seqs.Seq2(events[0:3]...)))
+			assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
 
-		// act
-		err := storage.Write(t.Context(), streamType, seqs.Seq2(events[7:]...))
+			for i := range count {
+				assert.NoError(t, storage.Write(t.Context(), streamType, seqs.Seq2(newEvent(1, func(e *es.Event) {
+					e.StreamType = streamType
+					e.StreamID = streamIDs[i]
+					e.StoreStreamID = storeStreamIDs[i]
+				}))))
+			}
 
-		// assert
-		assert.Error(t, err)
-		assert.EqualSeq2(t,
-			seqs.Seq2(events[0:3]...),
-			storage.Read(t.Context(), streamType, streamID, 0),
-			eventsEqual(t))
-	})
+			// act
+			got, token, err := storage.GetStreamIDs(t.Context(), streamType, "", 1000)
 
-	t.Run("should read a list of stream ids", func(t *testing.T) {
-		// arrange
-		var (
-			storage        = newStorage(t)
-			streamType     = newStreamType()
-			count          = 10
-			streamIDs      = uuid.V7At(time.Now(), count)
-			storeStreamIDs = uuid.V7At(time.Now(), count)
-		)
+			// assert
+			assert.NoError(t, err)
+			assert.EqualSlice(t, streamIDs, got)
+			assert.Equal(t, storeStreamIDs[count-1], token)
+		})
 
-		assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
+		t.Run("should read a list of stream ids filtered by token", func(t *testing.T) {
+			// arrange
+			var (
+				storage        = newInstance(t)
+				streamType     = newStreamType()
+				count          = 10
+				streamIDs      = uuid.V7At(time.Now(), count)
+				storeStreamIDs = uuid.V7At(time.Now(), count)
+			)
 
-		for i := range count {
-			assert.NoError(t, storage.Write(t.Context(), streamType, seqs.Seq2(newEvent(1, func(e *es.Event) {
-				e.StreamType = streamType
-				e.StreamID = streamIDs[i]
-				e.StoreStreamID = storeStreamIDs[i]
-			}))))
-		}
+			assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
 
-		// act
-		got, token, err := storage.GetStreamIDs(t.Context(), streamType, "", 1000)
+			for i := range count {
+				assert.NoError(t, storage.Write(t.Context(), streamType, seqs.Seq2(newEvent(1, func(e *es.Event) {
+					e.StreamType = streamType
+					e.StreamID = streamIDs[i]
+					e.StoreStreamID = storeStreamIDs[i]
+				}))))
+			}
 
-		// assert
-		assert.NoError(t, err)
-		assert.EqualSlice(t, streamIDs, got)
-		assert.Equal(t, storeStreamIDs[count-1], token)
-	})
+			// act
+			got, token, err := storage.GetStreamIDs(t.Context(), streamType, storeStreamIDs[4], 1000)
 
-	t.Run("should read a list of stream ids filtered by token", func(t *testing.T) {
-		// arrange
-		var (
-			storage        = newStorage(t)
-			streamType     = newStreamType()
-			count          = 10
-			streamIDs      = uuid.V7At(time.Now(), count)
-			storeStreamIDs = uuid.V7At(time.Now(), count)
-		)
+			// assert
+			assert.NoError(t, err)
+			assert.EqualSlice(t, streamIDs[5:], got)
+			assert.Equal(t, storeStreamIDs[count-1], token)
+		})
 
-		assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
+		t.Run("should return next token when reading list of stream ids", func(t *testing.T) {
+			// arrange
+			var (
+				storage        = newInstance(t)
+				streamType     = newStreamType()
+				count          = 10
+				streamIDs      = uuid.V7At(time.Now(), count)
+				storeStreamIDs = uuid.V7At(time.Now(), count)
+			)
 
-		for i := range count {
-			assert.NoError(t, storage.Write(t.Context(), streamType, seqs.Seq2(newEvent(1, func(e *es.Event) {
-				e.StreamType = streamType
-				e.StreamID = streamIDs[i]
-				e.StoreStreamID = storeStreamIDs[i]
-			}))))
-		}
+			assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
 
-		// act
-		got, token, err := storage.GetStreamIDs(t.Context(), streamType, storeStreamIDs[4], 1000)
+			for i := range count {
+				assert.NoError(t, storage.Write(t.Context(), streamType, seqs.Seq2(newEvent(1, func(e *es.Event) {
+					e.StreamType = streamType
+					e.StreamID = streamIDs[i]
+					e.StoreStreamID = storeStreamIDs[i]
+				}))))
+			}
 
-		// assert
-		assert.NoError(t, err)
-		assert.EqualSlice(t, streamIDs[5:], got)
-		assert.Equal(t, storeStreamIDs[count-1], token)
-	})
+			// act
+			got, token, err := storage.GetStreamIDs(t.Context(), streamType, "", 4)
 
-	t.Run("should return next token when reading list of stream ids", func(t *testing.T) {
-		// arrange
-		var (
-			storage        = newStorage(t)
-			streamType     = newStreamType()
-			count          = 10
-			streamIDs      = uuid.V7At(time.Now(), count)
-			storeStreamIDs = uuid.V7At(time.Now(), count)
-		)
+			// assert
+			assert.NoError(t, err)
+			assert.EqualSlice(t, streamIDs[0:4], got)
+			assert.Equal(t, storeStreamIDs[3], token)
+		})
 
-		assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
+		t.Run("should return same token empty list of stream ids", func(t *testing.T) {
+			// arrange
+			var (
+				storage        = newInstance(t)
+				streamType     = newStreamType()
+				count          = 10
+				streamIDs      = uuid.V7At(time.Now(), count)
+				storeStreamIDs = uuid.V7At(time.Now(), count)
+				token          = uuid.V7AtTime(time.Now().Add(time.Hour))
+			)
 
-		for i := range count {
-			assert.NoError(t, storage.Write(t.Context(), streamType, seqs.Seq2(newEvent(1, func(e *es.Event) {
-				e.StreamType = streamType
-				e.StreamID = streamIDs[i]
-				e.StoreStreamID = storeStreamIDs[i]
-			}))))
-		}
+			assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
 
-		// act
-		got, token, err := storage.GetStreamIDs(t.Context(), streamType, "", 4)
+			for i := range count {
+				assert.NoError(t, storage.Write(t.Context(), streamType, seqs.Seq2(newEvent(1, func(e *es.Event) {
+					e.StreamType = streamType
+					e.StreamID = streamIDs[i]
+					e.StoreStreamID = storeStreamIDs[i]
+				}))))
+			}
 
-		// assert
-		assert.NoError(t, err)
-		assert.EqualSlice(t, streamIDs[0:4], got)
-		assert.Equal(t, storeStreamIDs[3], token)
-	})
+			// act
+			got, nextToken, err := storage.GetStreamIDs(t.Context(), streamType, token, 4)
 
-	t.Run("should return same token empty list of stream ids", func(t *testing.T) {
-		// arrange
-		var (
-			storage        = newStorage(t)
-			streamType     = newStreamType()
-			count          = 10
-			streamIDs      = uuid.V7At(time.Now(), count)
-			storeStreamIDs = uuid.V7At(time.Now(), count)
-			token          = uuid.V7AtTime(time.Now().Add(time.Hour))
-		)
-
-		assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
-
-		for i := range count {
-			assert.NoError(t, storage.Write(t.Context(), streamType, seqs.Seq2(newEvent(1, func(e *es.Event) {
-				e.StreamType = streamType
-				e.StreamID = streamIDs[i]
-				e.StoreStreamID = storeStreamIDs[i]
-			}))))
-		}
-
-		// act
-		got, nextToken, err := storage.GetStreamIDs(t.Context(), streamType, token, 4)
-
-		// assert
-		assert.NoError(t, err)
-		assert.EqualSlice(t, []string{}, got)
-		assert.Equal(t, token, nextToken)
+			// assert
+			assert.NoError(t, err)
+			assert.EqualSlice(t, []string{}, got)
+			assert.Equal(t, token, nextToken)
+		})
 	})
 }
