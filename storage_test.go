@@ -33,6 +33,16 @@ func (e EventB) EventName() string {
 
 func TestStorage(t *testing.T) {
 	var (
+		newStorage = func(t *testing.T) es.Storage {
+			t.Helper()
+			storage, err := postgres.New(postgres.InstanceFromDSN(database.DSNTest(t)))
+			if assert.NoError(t, err) {
+				return storage
+			}
+
+			t.FailNow()
+			return nil
+		}
 		newStreamType = uuid.V7
 		newStreamID   = uuid.V7
 		newEvent      = func(eventNumber int64, mods ...func(e *es.Event)) es.Event {
@@ -121,9 +131,7 @@ func TestStorage(t *testing.T) {
 	t.Run("should register event types", func(t *testing.T) {
 		// arrange
 		var (
-			storage = assert.MustNoError(t, func() (*postgres.Storage, error) {
-				return postgres.New(postgres.InstanceFromDSN(database.DSNTest(t)))
-			})
+			storage    = newStorage(t)
 			streamType = newStreamType()
 		)
 
@@ -137,9 +145,7 @@ func TestStorage(t *testing.T) {
 	t.Run("should read no events", func(t *testing.T) {
 		// arrange
 		var (
-			storage = assert.MustNoError(t, func() (*postgres.Storage, error) {
-				return postgres.New(postgres.InstanceFromDSN(database.DSNTest(t)))
-			})
+			storage    = newStorage(t)
 			streamType = newStreamType()
 			streamID   = newStreamID()
 		)
@@ -156,9 +162,7 @@ func TestStorage(t *testing.T) {
 	t.Run("should write and read events", func(t *testing.T) {
 		// arrange
 		var (
-			storage = assert.MustNoError(t, func() (*postgres.Storage, error) {
-				return postgres.New(postgres.InstanceFromDSN(database.DSNTest(t)))
-			})
+			storage    = newStorage(t)
 			streamType = newStreamType()
 			streamID   = newStreamID()
 			events     = newEvents(streamType, streamID, 10)
@@ -177,9 +181,7 @@ func TestStorage(t *testing.T) {
 	t.Run("should support optimistic locks by failing if event_number already written", func(t *testing.T) {
 		// arrange
 		var (
-			storage = assert.MustNoError(t, func() (*postgres.Storage, error) {
-				return postgres.New(postgres.InstanceFromDSN(database.DSNTest(t)))
-			})
+			storage    = newStorage(t)
 			streamType = newStreamType()
 			streamID   = newStreamID()
 			events     = newEvents(streamType, streamID, 10)
@@ -202,9 +204,7 @@ func TestStorage(t *testing.T) {
 	t.Run("should support optimistic locks by failing if event_number too high", func(t *testing.T) {
 		// arrange
 		var (
-			storage = assert.MustNoError(t, func() (*postgres.Storage, error) {
-				return postgres.New(postgres.InstanceFromDSN(database.DSNTest(t)))
-			})
+			storage    = newStorage(t)
 			streamType = newStreamType()
 			streamID   = newStreamID()
 			events     = newEvents(streamType, streamID, 10)
@@ -227,9 +227,7 @@ func TestStorage(t *testing.T) {
 	t.Run("should read a list of stream ids", func(t *testing.T) {
 		// arrange
 		var (
-			storage = assert.MustNoError(t, func() (*postgres.Storage, error) {
-				return postgres.New(postgres.InstanceFromDSN(database.DSNTest(t)))
-			})
+			storage        = newStorage(t)
 			streamType     = newStreamType()
 			count          = 10
 			streamIDs      = uuid.V7At(time.Now(), count)
@@ -258,9 +256,7 @@ func TestStorage(t *testing.T) {
 	t.Run("should read a list of stream ids filtered by token", func(t *testing.T) {
 		// arrange
 		var (
-			storage = assert.MustNoError(t, func() (*postgres.Storage, error) {
-				return postgres.New(postgres.InstanceFromDSN(database.DSNTest(t)))
-			})
+			storage        = newStorage(t)
 			streamType     = newStreamType()
 			count          = 10
 			streamIDs      = uuid.V7At(time.Now(), count)
@@ -289,9 +285,7 @@ func TestStorage(t *testing.T) {
 	t.Run("should return next token when reading list of stream ids", func(t *testing.T) {
 		// arrange
 		var (
-			storage = assert.MustNoError(t, func() (*postgres.Storage, error) {
-				return postgres.New(postgres.InstanceFromDSN(database.DSNTest(t)))
-			})
+			storage        = newStorage(t)
 			streamType     = newStreamType()
 			count          = 10
 			streamIDs      = uuid.V7At(time.Now(), count)
@@ -320,9 +314,7 @@ func TestStorage(t *testing.T) {
 	t.Run("should return same token empty list of stream ids", func(t *testing.T) {
 		// arrange
 		var (
-			storage = assert.MustNoError(t, func() (*postgres.Storage, error) {
-				return postgres.New(postgres.InstanceFromDSN(database.DSNTest(t)))
-			})
+			storage        = newStorage(t)
 			streamType     = newStreamType()
 			count          = 10
 			streamIDs      = uuid.V7At(time.Now(), count)
