@@ -1,0 +1,37 @@
+CREATE TABLE IF NOT EXISTS {{ .Prefix }}_events
+(
+    stream_type     VARCHAR                     NOT NULL,
+    stream_id       VARCHAR                     NOT NULL,
+    event_number    INTEGER                      NOT NULL,
+    event_time      timestamp with time zone    NOT NULL,
+    store_event_id  uuid                        NOT NULL,
+    store_stream_id uuid                        NOT NULL,
+    content_name    VARCHAR                     NOT NULL,
+    content         jsonb                       NOT NULL,
+    metadata        jsonb                       NOT NULL,
+
+    CONSTRAINT {{ .Prefix }}_events_pkey
+        PRIMARY KEY (stream_type, stream_id, event_number)
+);
+
+CREATE TABLE IF NOT EXISTS {{ .Prefix }}_outbox
+(
+    stream_type       VARCHAR     NOT NULL,
+    stream_id         VARCHAR     NOT NULL,
+    store_stream_id   uuid        NOT NULL,
+    event_number      INTEGER     NOT NULL,
+    watermark         INTEGER     NOT NULL,
+    partition         INTEGER     NOT NULL,
+    process_at        timestamptz NOT NULL DEFAULT now(),
+    retry_count       INTEGER     NOT NULL DEFAULT 0,
+    PRIMARY KEY (stream_type, stream_id)
+);
+
+CREATE INDEX IF NOT EXISTS {{ .Prefix }}_outbox_process_at_partition_ix
+    ON {{ .Prefix }}_outbox (process_at, partition, stream_type)
+    WHERE watermark <> event_number;
+
+CREATE INDEX IF NOT EXISTS {{ .Prefix }}_outbox_stream_type_ix
+    ON {{ .Prefix }}_outbox (stream_type)
+    INCLUDE (watermark, event_number)
+    WHERE watermark <> event_number;
