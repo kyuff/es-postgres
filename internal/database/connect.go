@@ -52,6 +52,8 @@ func DSNTest(t *testing.T) string {
 
 	pool.Close()
 
+	t.Logf("Using Schema %s", name)
+
 	return dsn
 }
 
