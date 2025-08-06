@@ -27,11 +27,14 @@ CREATE TABLE IF NOT EXISTS {{ .Prefix }}_outbox
     PRIMARY KEY (stream_type, stream_id)
 );
 
-CREATE INDEX IF NOT EXISTS {{ .Prefix }}_outbox_process_at_partition_ix
+CREATE INDEX IF NOT EXISTS {{ .Prefix }}_outbox_process_at_partition_index
     ON {{ .Prefix }}_outbox (process_at, partition, stream_type)
     WHERE watermark <> event_number;
 
-CREATE INDEX IF NOT EXISTS {{ .Prefix }}_outbox_stream_type_ix
+CREATE INDEX IF NOT EXISTS {{ .Prefix }}_outbox_stream_type_index
     ON {{ .Prefix }}_outbox (stream_type)
     INCLUDE (watermark, event_number)
     WHERE watermark <> event_number;
+
+CREATE INDEX IF NOT EXISTS {{ .Prefix }}_outbox_store_stream_id_index
+ON {{ .Prefix }}_outbox (store_stream_id, stream_type);

@@ -20,6 +20,7 @@ type sqlQueries struct {
 	writeEvent             string
 	insertOutbox           string
 	updateOutbox           string
+	selectStreamIDs        string
 }
 
 func NewSchema(prefix string) (*Schema, error) {
@@ -33,6 +34,7 @@ func NewSchema(prefix string) (*Schema, error) {
 		&sql.writeEvent,
 		&sql.insertOutbox,
 		&sql.updateOutbox,
+		&sql.selectStreamIDs,
 	)
 	if err != nil {
 		return nil, err
@@ -228,4 +230,39 @@ func (s *Schema) UpdateOutbox(ctx context.Context, tx DBTX, streamType, streamID
 	}
 
 	return affected.RowsAffected(), nil
+}
+
+func init() {
+	sql.selectStreamIDs = `
+SELECT stream_id, store_stream_id
+FROM {{ .Prefix }}_outbox
+WHERE store_stream_id > $1
+  AND stream_type = $2
+ORDER BY store_stream_id ASC
+LIMIT $3;`
+}
+
+func (s *Schema) SelectStreamIDs(ctx context.Context, db DBTX, streamType string, token string, limit int64) ([]string, string, error) {
+	rows, err := db.Query(ctx, sql.selectStreamIDs, token, streamType, limit)
+	if err != nil {
+		return nil, "", err
+	}
+
+	var result []string
+	var nextToken = ""
+	for rows.Next() {
+		var streamID string
+		err = rows.Scan(&streamID, &nextToken)
+		if err != nil {
+			return nil, "", err
+		}
+
+		result = append(result, streamID)
+	}
+
+	if len(result) == 0 {
+		nextToken = token
+	}
+
+	return result, nextToken, nil
 }
