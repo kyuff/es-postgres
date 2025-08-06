@@ -106,7 +106,8 @@ func (s *Storage) Read(ctx context.Context, streamType string, streamID string, 
 
 			event.Content, err = s.cfg.codec.Decode(event.StreamType, contentName, content)
 			if err != nil {
-				yield(es.Event{}, fmt.Errorf("[es/postgres] Failed to decode events for %s.%s [%d]: %w",
+				yield(es.Event{}, fmt.Errorf("[es/postgres] Failed to decode event %q for %s.%s [%d]: %w",
+					contentName,
 					streamType,
 					streamID,
 					eventNumber,
@@ -123,8 +124,85 @@ func (s *Storage) Read(ctx context.Context, streamType string, streamID string, 
 }
 
 func (s *Storage) Write(ctx context.Context, streamType string, events iter.Seq2[es.Event, error]) error {
-	//TODO implement me
-	panic("implement me")
+	conn, err := s.connector.AcquireWrite(ctx)
+	if err != nil {
+		return fmt.Errorf("[es/postgres] Failed to acquire write connection: %w", err)
+	}
+	defer conn.Release()
+
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("[es/postgres] Failed to begin transaction: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	err = s.writeEvents(ctx, tx, streamType, events)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (s *Storage) writeEvents(ctx context.Context, tx database.DBTX, streamType string, events iter.Seq2[es.Event, error]) error {
+	var (
+		firstEvent es.Event
+		lastEvent  es.Event
+		eventCount = 0
+	)
+
+	for event, err := range validateStreamWrite(streamType, events) {
+		if err != nil {
+			return fmt.Errorf("[es/postgres] Range over events to be written failed: %w", err)
+		}
+
+		if eventCount == 0 {
+			firstEvent = event
+		}
+
+		err = s.schema.WriteEvent(ctx, tx, event)
+		if err != nil {
+			return fmt.Errorf("[es/postgres] Failed to write event: %w", err)
+		}
+
+		lastEvent = event
+		eventCount++
+	}
+
+	if eventCount == 0 {
+		return nil // nothing was done
+	}
+
+	var affected int64
+	var err error
+	if firstEvent.EventNumber == 1 {
+		affected, err = s.schema.InsertOutbox(ctx, tx,
+			streamType,
+			lastEvent.StreamID,
+			lastEvent.StoreStreamID,
+			lastEvent.EventNumber,
+			firstEvent.EventNumber-1,
+			0, // TODO add partitioner
+		)
+	} else {
+		affected, err = s.schema.UpdateOutbox(ctx, tx,
+			streamType,
+			lastEvent.StreamID,
+			lastEvent.EventNumber,
+			firstEvent.EventNumber-1,
+		)
+	}
+	if err != nil {
+		return err
+	}
+
+	if affected != 1 {
+		return fmt.Errorf("[es/postgres] Failed to update outbox for %s.%s", streamType, lastEvent.StreamID)
+	}
+
+	return nil
 }
 
 func (s *Storage) StartPublish(ctx context.Context, w es.Writer) error {

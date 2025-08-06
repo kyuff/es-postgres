@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/kyuff/es"
 )
 
 var sql = sqlQueries{}
@@ -16,6 +17,9 @@ type sqlQueries struct {
 	createMigrationTable   string
 	insertMigrationRow     string
 	selectEvents           string
+	writeEvent             string
+	insertOutbox           string
+	updateOutbox           string
 }
 
 func NewSchema(prefix string) (*Schema, error) {
@@ -26,6 +30,9 @@ func NewSchema(prefix string) (*Schema, error) {
 		&sql.createMigrationTable,
 		&sql.insertMigrationRow,
 		&sql.selectEvents,
+		&sql.writeEvent,
+		&sql.insertOutbox,
+		&sql.updateOutbox,
 	)
 	if err != nil {
 		return nil, err
@@ -150,4 +157,75 @@ func (s *Schema) SelectEvents(ctx context.Context, db DBTX, streamType string, s
 	}
 
 	return rows, nil
+}
+
+func init() {
+	sql.writeEvent = `
+INSERT INTO {{ .Prefix }}_events (
+                                stream_type,
+                                stream_id,
+                                event_number,
+                                event_time,
+                                store_event_id,
+                                store_stream_id,
+                                content_name,
+                                content,
+                                metadata
+                            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9);`
+}
+
+func (s *Schema) WriteEvent(ctx context.Context, db DBTX, event es.Event) error {
+	_, err := db.Exec(ctx, sql.writeEvent,
+		event.StreamType,
+		event.StreamID,
+		event.EventNumber,
+		event.EventTime,
+		event.StoreEventID,
+		event.StoreStreamID,
+		event.Content.EventName(),
+		event.Content,
+		`{}`,
+	)
+	return err
+}
+
+func init() {
+	sql.insertOutbox = `
+INSERT INTO {{ .Prefix }}_outbox (
+	stream_type,
+	stream_id,
+	store_stream_id,
+	event_number,
+	watermark,
+	partition
+) VALUES ($1,$2,$3,$4,$5,$6);
+`
+}
+
+func (s *Schema) InsertOutbox(ctx context.Context, tx DBTX, streamType, streamID, storeStreamID string, eventNumber, watermark int64, partition uint32) (int64, error) {
+	affected, err := tx.Exec(ctx, sql.insertOutbox, streamType, streamID, storeStreamID, eventNumber, watermark, partition)
+	if err != nil {
+		return 0, err
+	}
+
+	return affected.RowsAffected(), nil
+}
+
+func init() {
+	sql.updateOutbox = `
+UPDATE {{ .Prefix }}_outbox
+SET event_number = $3
+WHERE stream_type = $1
+  AND stream_id = $2
+  AND event_number = $4
+`
+}
+
+func (s *Schema) UpdateOutbox(ctx context.Context, tx DBTX, streamType, streamID string, eventNumber, lastEventNumber int64) (int64, error) {
+	affected, err := tx.Exec(ctx, sql.updateOutbox, streamType, streamID, eventNumber, lastEventNumber)
+	if err != nil {
+		return 0, err
+	}
+
+	return affected.RowsAffected(), nil
 }
