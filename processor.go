@@ -39,7 +39,7 @@ type processWriter struct {
 func (p *processWriter) Process(ctx context.Context, stream database.Stream) error {
 	return p.single.TryDo(stream, func() error {
 		return p.w.Write(ctx, stream.Type, func(yield func(es.Event, error) bool) {
-			db, err := p.connector.AcquireWriteStream(ctx, stream.Type, stream.ID)
+			db, err := p.connector.AcquireWriteStream(ctx, stream.Type, stream.StoreID)
 			if err != nil {
 				yield(es.Event{}, fmt.Errorf("[es/postgres] Failed to acquire write connection: %w", err))
 				return
@@ -63,7 +63,7 @@ func (p *processWriter) Process(ctx context.Context, stream database.Stream) err
 				delay      time.Duration
 			)
 
-			for event, err := range p.rd.Read(ctx, stream.Type, stream.ID, watermark) {
+			for event, err := range p.rd.Read(ctx, stream.Type, stream.StoreID, watermark) {
 				if err != nil {
 					yield(event, err)
 					break

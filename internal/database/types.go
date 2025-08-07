@@ -1,8 +1,8 @@
 package database
 
 type Stream struct {
-	ID   string
-	Type string
+	StoreID string
+	Type    string
 }
 
 type OutboxWatermark struct {
