@@ -296,7 +296,7 @@ LIMIT $3
 `
 }
 
-func (s *Schema) SelectOutboxStreamIDs(ctx context.Context, db DBTX, graceWindow time.Duration, partitions []uint32) ([]Schema, error) {
+func (s *Schema) SelectOutboxStreamIDs(ctx context.Context, db DBTX, graceWindow time.Duration, partitions []uint32) ([]Stream, error) {
 	return nil, nil
 }
 
