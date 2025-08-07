@@ -1,4 +1,4 @@
-package postgres
+package processor
 
 import (
 	"context"
@@ -10,33 +10,29 @@ import (
 	"github.com/kyuff/es-postgres/internal/singleflight"
 )
 
-type processor interface {
-	Process(ctx context.Context, stream database.Stream) error
-}
-
-func newProcessWriter(cfg *Config, connector Connector, schema *database.Schema, w es.Writer, rd reader) *processWriter {
-	return &processWriter{
-		cfg:       cfg,
+func New(connector Connector, schema *database.Schema, w es.Writer, rd Reader, backoff func(retryCount int64) time.Duration) *Processor {
+	return &Processor{
 		connector: connector,
 		w:         w,
 		schema:    schema,
 		rd:        rd,
+		backoff:   backoff,
 
 		single: singleflight.New[database.Stream](),
 	}
 }
 
-type processWriter struct {
-	cfg       *Config
+type Processor struct {
+	backoff   func(retryCount int64) time.Duration
 	connector Connector
 	w         es.Writer
 	schema    *database.Schema
-	rd        reader
+	rd        Reader
 
 	single *singleflight.Group[database.Stream]
 }
 
-func (p *processWriter) Process(ctx context.Context, stream database.Stream) error {
+func (p *Processor) Process(ctx context.Context, stream database.Stream) error {
 	return p.single.TryDo(stream, func() error {
 		return p.w.Write(ctx, stream.Type, func(yield func(es.Event, error) bool) {
 			db, err := p.connector.AcquireWriteStream(ctx, stream.Type, stream.StoreID)
@@ -79,7 +75,7 @@ func (p *processWriter) Process(ctx context.Context, stream database.Stream) err
 			if watermark < eventNumber {
 				// failed to raise the watermark
 				retryCount++
-				delay = p.cfg.processBackoff(stream.Type, retryCount)
+				delay = p.backoff(retryCount)
 			}
 
 			err = p.schema.UpdateOutboxWatermark(ctx, db, stream, delay, database.OutboxWatermark{

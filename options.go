@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/kyuff/es-postgres/backoff"
 	"github.com/kyuff/es-postgres/internal/hash"
 	"github.com/kyuff/es-postgres/internal/logger"
 	"github.com/kyuff/es/codecs"
@@ -22,7 +23,7 @@ type Config struct {
 	reconcileInterval time.Duration
 	reconcileTimeout  time.Duration
 	processTimeout    time.Duration
-	processBackoff    func(retryCount int64) time.Duration
+	processBackoff    func(streamType string, retryCount int64) time.Duration
 }
 
 func defaultOptions() *Config {
@@ -174,7 +175,7 @@ func WithProcessTimeout(timeout time.Duration) Option {
 }
 
 // WithProcessBackoff is used to delay processing of a stream in the outbox after failure
-func WithProcessBackoff(fn func(retryCount int64) time.Duration) Option {
+func WithProcessBackoff(fn func(streamType string, retryCount int64) time.Duration) Option {
 	return func(cfg *Config) {
 		cfg.processBackoff = fn
 	}
@@ -182,21 +183,21 @@ func WithProcessBackoff(fn func(retryCount int64) time.Duration) Option {
 
 // WithFixedProcessBackoff waits a fixed amount of time between retries.
 func WithFixedProcessBackoff(d time.Duration) Option {
-	return WithProcessBackoff(func(_ int64) time.Duration {
-		return d
+	return WithProcessBackoff(func(_ string, _ int64) time.Duration {
+		return backoff.Fixed(d)
 	})
 }
 
 // WithLinearProcessBackoff increases the wait time linearly with each retry.
 func WithLinearProcessBackoff(increment time.Duration) Option {
-	return WithProcessBackoff(func(retries int64) time.Duration {
-		return increment * time.Duration(retries)
+	return WithProcessBackoff(func(_ string, retries int64) time.Duration {
+		return backoff.Linear(increment, retries)
 	})
 }
 
 // WithExponentialProcessBackoff doubles the wait time with each retry.
 func WithExponentialProcessBackoff(base time.Duration) Option {
-	return WithProcessBackoff(func(retries int64) time.Duration {
-		return base * time.Duration(1<<retries)
+	return WithProcessBackoff(func(_ string, retries int64) time.Duration {
+		return backoff.Exponential(base, retries)
 	})
 }
