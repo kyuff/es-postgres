@@ -30,7 +30,7 @@ type eventReader struct {
 
 func (rd *eventReader) Read(ctx context.Context, streamType, streamID string, eventNumber int64) iter.Seq2[es.Event, error] {
 	return func(yield func(es.Event, error) bool) {
-		db, err := rd.connector.AcquireRead(ctx)
+		db, err := rd.connector.AcquireReadStream(ctx, streamType, streamID)
 		if err != nil {
 			yield(es.Event{}, fmt.Errorf("[es/postgres] Failed to acquire read connection: %w", err))
 			return
