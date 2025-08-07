@@ -79,7 +79,7 @@ func (p *processWriter) Process(ctx context.Context, stream database.Stream) err
 			if watermark < eventNumber {
 				// failed to raise the watermark
 				retryCount++
-				delay = p.cfg.processBackoff(retryCount)
+				delay = p.cfg.processBackoff(stream.Type, retryCount)
 			}
 
 			err = p.schema.UpdateOutboxWatermark(ctx, db, stream, delay, database.OutboxWatermark{
