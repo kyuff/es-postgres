@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"iter"
@@ -11,6 +10,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kyuff/es"
 	"github.com/kyuff/es-postgres/internal/database"
+	"github.com/kyuff/es-postgres/internal/reconcilers"
+	"github.com/kyuff/es-postgres/internal/uuid"
+	"golang.org/x/sync/errgroup"
 )
 
 func New(connector Connector, opts ...Option) (*Storage, error) {
@@ -45,83 +47,44 @@ func New(connector Connector, opts ...Option) (*Storage, error) {
 		return nil, err
 	}
 
+	var (
+		valuer = newFixedSizeValuer(128) // TODO Option for size
+		reader = newEventReader(connector, schema, cfg.codec)
+	)
+
 	return &Storage{
 		cfg:       cfg,
 		connector: connector,
 		schema:    schema,
+		reader:    reader,
+		reconciles: []reconcile{
+			reconcilers.NewPeriodic(
+				cfg.logger,
+				connector,
+				schema,
+				valuer,
+				cfg.reconcileInterval,
+				cfg.reconcileTimeout,
+				cfg.processTimeout,
+			),
+		},
 	}, nil
 }
 
+type reconcile interface {
+	Reconcile(ctx context.Context, p reconcilers.Processor) error
+}
+
 type Storage struct {
-	cfg       *Config
-	connector Connector
-	schema    *database.Schema
+	cfg        *Config
+	connector  Connector
+	schema     *database.Schema
+	reader     reader
+	reconciles []reconcile
 }
 
 func (s *Storage) Read(ctx context.Context, streamType string, streamID string, eventNumber int64) iter.Seq2[es.Event, error] {
-	return func(yield func(es.Event, error) bool) {
-		db, err := s.connector.AcquireRead(ctx)
-		if err != nil {
-			yield(es.Event{}, fmt.Errorf("[es/postgres] Failed to acquire read connection: %w", err))
-			return
-		}
-		defer db.Release()
-
-		rows, err := s.schema.SelectEvents(ctx, db, streamType, streamID, eventNumber)
-		if err != nil {
-			yield(es.Event{}, fmt.Errorf("[es/postgres] Failed to select events for %s.%s [%d]: %w",
-				streamType,
-				streamID,
-				eventNumber,
-				err,
-			))
-			return
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var event es.Event
-			var content []byte
-			var contentName string
-			var metadata json.RawMessage
-			err := rows.Scan(
-				&event.StreamType,
-				&event.StreamID,
-				&event.EventNumber,
-				&event.EventTime,
-				&event.StoreEventID,
-				&event.StoreStreamID,
-				&contentName,
-				&content,
-				&metadata,
-			)
-			if err != nil {
-				yield(es.Event{}, fmt.Errorf("[es/postgres] Failed to scan events for %s.%s [%d]: %w",
-					streamType,
-					streamID,
-					eventNumber,
-					err,
-				))
-				return
-			}
-
-			event.Content, err = s.cfg.codec.Decode(event.StreamType, contentName, content)
-			if err != nil {
-				yield(es.Event{}, fmt.Errorf("[es/postgres] Failed to decode event %q for %s.%s [%d]: %w",
-					contentName,
-					streamType,
-					streamID,
-					eventNumber,
-					err,
-				))
-				return
-			}
-
-			if !yield(event, nil) {
-				return
-			}
-		}
-	}
+	return s.reader.Read(ctx, streamType, streamID, eventNumber)
 }
 
 func (s *Storage) Write(ctx context.Context, streamType string, events iter.Seq2[es.Event, error]) error {
@@ -207,8 +170,16 @@ func (s *Storage) writeEvents(ctx context.Context, tx database.DBTX, streamType 
 }
 
 func (s *Storage) StartPublish(ctx context.Context, w es.Writer) error {
-	//TODO implement me
-	panic("implement me")
+	g, publishCtx := errgroup.WithContext(ctx)
+
+	p := newProcessWriter(s.cfg, s.connector, s.schema, w, s.reader)
+	for _, r := range s.reconciles {
+		g.Go(func() error {
+			return r.Reconcile(publishCtx, p)
+		})
+	}
+
+	return g.Wait()
 }
 
 func (s *Storage) Register(streamType string, types ...es.Content) error {
@@ -223,7 +194,7 @@ func (s *Storage) GetStreamIDs(ctx context.Context, streamType string, storeStre
 	defer db.Release()
 
 	if strings.TrimSpace(storeStreamID) == "" {
-		storeStreamID = "00000000-0000-0000-0000-000000000000"
+		storeStreamID = uuid.Empty
 	}
 
 	streamIDs, nextToken, err := s.schema.SelectStreamIDs(ctx, db, streamType, storeStreamID, limit)

@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/kyuff/es"
@@ -21,6 +22,7 @@ type sqlQueries struct {
 	insertOutbox           string
 	updateOutbox           string
 	selectStreamIDs        string
+	selectOutboxStreamIDs  string
 }
 
 func NewSchema(prefix string) (*Schema, error) {
@@ -35,6 +37,7 @@ func NewSchema(prefix string) (*Schema, error) {
 		&sql.insertOutbox,
 		&sql.updateOutbox,
 		&sql.selectStreamIDs,
+		&sql.selectOutboxStreamIDs,
 	)
 	if err != nil {
 		return nil, err
@@ -265,4 +268,53 @@ func (s *Schema) SelectStreamIDs(ctx context.Context, db DBTX, streamType string
 	}
 
 	return result, nextToken, nil
+}
+
+func init() {
+	sql.selectOutboxStreamIDs = `
+SELECT stream_type,
+       store_stream_id
+FROM {{ .Prefix }}_outbox
+WHERE
+	 watermark <> event_number 
+ AND partition = ANY ($1)
+ AND store_stream_id > $2
+ AND process_at <= $3
+ORDER BY store_stream_id
+LIMIT $4
+    
+`
+}
+
+func (s *Schema) SelectOutboxStreamIDs(ctx context.Context, db DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]Stream, error) {
+	rows, err := db.Query(ctx, sql.selectOutboxStreamIDs,
+		partitions,
+		time.Now().Add(-graceWindow),
+		token,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []Stream
+	for rows.Next() {
+		var stream Stream
+		err = rows.Scan(&stream.Type, &stream.StoreID)
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, stream)
+	}
+
+	return result, nil
+}
+
+func (s *Schema) SelectOutboxWatermark(ctx context.Context, db DBTX, stream Stream) (OutboxWatermark, int64, error) {
+	return OutboxWatermark{}, 0, nil
+}
+
+func (s *Schema) UpdateOutboxWatermark(ctx context.Context, db DBTX, stream Stream, delay time.Duration, watermark OutboxWatermark) error {
+	return nil
 }

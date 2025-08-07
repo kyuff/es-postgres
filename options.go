@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"time"
 
 	"github.com/kyuff/es-postgres/internal/hash"
 	"github.com/kyuff/es-postgres/internal/logger"
@@ -13,11 +14,31 @@ import (
 )
 
 type Config struct {
-	logger      Logger
-	startCtx    func() context.Context
-	tablePrefix string
-	codec       codec
-	partitioner func(streamType, streamID string) uint32
+	logger            Logger
+	startCtx          func() context.Context
+	tablePrefix       string
+	codec             codec
+	partitioner       func(streamType, streamID string) uint32
+	reconcileInterval time.Duration
+	reconcileTimeout  time.Duration
+	processTimeout    time.Duration
+	processBackoff    func(retryCount int64) time.Duration
+}
+
+func defaultOptions() *Config {
+	return applyOptions(&Config{},
+		// add default options here
+		WithNoopLogger(),
+		WithStartContext(context.Background()),
+		WithTablePrefix("es"),
+		withJsonCodec(),
+		WithFNVPartitioner(128),
+		WithReconcileInterval(time.Second*10),
+		WithReconcileTimeout(time.Second*5),
+		WithProcessTimeout(time.Second*3),
+		WithLinearProcessBackoff(time.Second),
+	)
+
 }
 
 var tablePrefixRE = regexp.MustCompile(`^[a-z][a-z0-9]{1,20}$`)
@@ -39,6 +60,18 @@ func (c *Config) validate() error {
 		return errors.New("missing codec")
 	}
 
+	if c.partitioner == nil {
+		return errors.New("missing partitioner")
+	}
+
+	if c.reconcileInterval <= 0 {
+		return errors.New("missing check interval")
+	}
+
+	if c.processBackoff == nil {
+		return errors.New("missing process backoff")
+	}
+
 	return nil
 }
 
@@ -47,18 +80,6 @@ type Option func(cfg *Config)
 type Logger interface {
 	InfofCtx(ctx context.Context, template string, args ...any)
 	ErrorfCtx(ctx context.Context, template string, args ...any)
-}
-
-func defaultOptions() *Config {
-	return applyOptions(&Config{},
-		// add default options here
-		WithNoopLogger(),
-		WithStartContext(context.Background()),
-		WithTablePrefix("es"),
-		withJsonCodec(),
-		WithFNVPartitioner(128),
-	)
-
 }
 
 func applyOptions(options *Config, opts ...Option) *Config {
@@ -124,5 +145,58 @@ func WithPartitioner(partitioner func(streamType, streamID string) uint32) Optio
 func WithFNVPartitioner(partitionCount uint32) Option {
 	return WithPartitioner(func(streamType, streamID string) uint32 {
 		return hash.FNV(streamType+streamID, partitionCount)
+	})
+}
+
+// WithReconcileInterval sets how often the Storage will check for new items in the Outbox.
+// This is purely a fallback mechanism, as there is a life-streaming mechanism that
+// should take all traffic.
+// In some error scenarios this check will ensure everything is published.
+// The default value is reasonable high, so as to not put too much load on the database.
+func WithReconcileInterval(interval time.Duration) Option {
+	return func(cfg *Config) {
+		cfg.reconcileInterval = interval
+	}
+}
+
+// WithReconcileTimeout sets the timeout for doing a reconcile check.
+func WithReconcileTimeout(timeout time.Duration) Option {
+	return func(cfg *Config) {
+		cfg.reconcileTimeout = timeout
+	}
+}
+
+// WithProcessTimeout sets the timeout for processing a stream in the outbox
+func WithProcessTimeout(timeout time.Duration) Option {
+	return func(cfg *Config) {
+		cfg.processTimeout = timeout
+	}
+}
+
+// WithProcessBackoff is used to delay processing of a stream in the outbox after failure
+func WithProcessBackoff(fn func(retryCount int64) time.Duration) Option {
+	return func(cfg *Config) {
+		cfg.processBackoff = fn
+	}
+}
+
+// WithFixedProcessBackoff waits a fixed amount of time between retries.
+func WithFixedProcessBackoff(d time.Duration) Option {
+	return WithProcessBackoff(func(_ int64) time.Duration {
+		return d
+	})
+}
+
+// WithLinearProcessBackoff increases the wait time linearly with each retry.
+func WithLinearProcessBackoff(increment time.Duration) Option {
+	return WithProcessBackoff(func(retries int64) time.Duration {
+		return increment * time.Duration(retries)
+	})
+}
+
+// WithExponentialProcessBackoff doubles the wait time with each retry.
+func WithExponentialProcessBackoff(base time.Duration) Option {
+	return WithProcessBackoff(func(retries int64) time.Duration {
+		return base * time.Duration(1<<retries)
 	})
 }

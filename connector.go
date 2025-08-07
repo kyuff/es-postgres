@@ -20,8 +20,14 @@ type Connector interface {
 	// AcquireRead supplies a connection used to read
 	AcquireRead(ctx context.Context) (*pgxpool.Conn, error)
 
+	// AcquireReadStream supplies a connection used to read from the given stream
+	AcquireReadStream(ctx context.Context, streamType, streamID string) (*pgxpool.Conn, error)
+
 	// AcquireWrite supplies a connection used to write
 	AcquireWrite(ctx context.Context) (*pgxpool.Conn, error)
+
+	// AcquireWriteStream supplies a connection used to write to the given stream
+	AcquireWriteStream(ctx context.Context, streamType, streamID string) (*pgxpool.Conn, error)
 
 	// isConnector is a marker to enforce package implementations for now.
 	isConnector()
@@ -66,7 +72,15 @@ func (i *Instance) AcquireWrite(ctx context.Context) (*pgxpool.Conn, error) {
 	return i.pool.Acquire(ctx)
 }
 
+func (i *Instance) AcquireWriteStream(ctx context.Context, streamType, streamID string) (*pgxpool.Conn, error) {
+	return i.pool.Acquire(ctx)
+}
+
 func (i *Instance) AcquireRead(ctx context.Context) (*pgxpool.Conn, error) {
+	return i.pool.Acquire(ctx)
+}
+
+func (i *Instance) AcquireReadStream(ctx context.Context, streamType, streamID string) (*pgxpool.Conn, error) {
 	return i.pool.Acquire(ctx)
 }
 
