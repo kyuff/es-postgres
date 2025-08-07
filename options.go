@@ -22,6 +22,7 @@ type Config struct {
 	reconcileInterval time.Duration
 	reconcileTimeout  time.Duration
 	processTimeout    time.Duration
+	processBackoff    func(retryCount int64) time.Duration
 }
 
 func defaultOptions() *Config {
@@ -35,6 +36,7 @@ func defaultOptions() *Config {
 		WithReconcileInterval(time.Second*10),
 		WithReconcileTimeout(time.Second*5),
 		WithProcessTimeout(time.Second*3),
+		WithLinearProcessBackoff(time.Second),
 	)
 
 }
@@ -64,6 +66,10 @@ func (c *Config) validate() error {
 
 	if c.reconcileInterval <= 0 {
 		return errors.New("missing check interval")
+	}
+
+	if c.processBackoff == nil {
+		return errors.New("missing process backoff")
 	}
 
 	return nil
@@ -165,4 +171,32 @@ func WithProcessTimeout(timeout time.Duration) Option {
 	return func(cfg *Config) {
 		cfg.processTimeout = timeout
 	}
+}
+
+// WithProcessBackoff is used to delay processing of a stream in the outbox after failure
+func WithProcessBackoff(fn func(retryCount int64) time.Duration) Option {
+	return func(cfg *Config) {
+		cfg.processBackoff = fn
+	}
+}
+
+// WithFixedProcessBackoff waits a fixed amount of time between retries.
+func WithFixedProcessBackoff(d time.Duration) Option {
+	return WithProcessBackoff(func(_ int64) time.Duration {
+		return d
+	})
+}
+
+// WithLinearProcessBackoff increases the wait time linearly with each retry.
+func WithLinearProcessBackoff(increment time.Duration) Option {
+	return WithProcessBackoff(func(retries int64) time.Duration {
+		return increment * time.Duration(retries)
+	})
+}
+
+// WithExponentialProcessBackoff doubles the wait time with each retry.
+func WithExponentialProcessBackoff(base time.Duration) Option {
+	return WithProcessBackoff(func(retries int64) time.Duration {
+		return base * time.Duration(1<<retries)
+	})
 }

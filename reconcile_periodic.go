@@ -72,7 +72,7 @@ func (h *reconcilePeriodic) reconcile(rootCtx context.Context, p processor) erro
 			processCtx, processCancel := context.WithTimeout(rootCtx, h.cfg.processTimeout)
 			defer processCancel()
 
-			return p.Process(processCtx, stream)
+			return p.Process(processCtx, stream.Stream)
 		})
 	}
 

@@ -22,6 +22,7 @@ type sqlQueries struct {
 	insertOutbox           string
 	updateOutbox           string
 	selectStreamIDs        string
+	selectOutboxStreamIDs  string
 }
 
 func NewSchema(prefix string) (*Schema, error) {
@@ -36,6 +37,7 @@ func NewSchema(prefix string) (*Schema, error) {
 		&sql.insertOutbox,
 		&sql.updateOutbox,
 		&sql.selectStreamIDs,
+		&sql.selectOutboxStreamIDs,
 	)
 	if err != nil {
 		return nil, err
@@ -268,6 +270,40 @@ func (s *Schema) SelectStreamIDs(ctx context.Context, db DBTX, streamType string
 	return result, nextToken, nil
 }
 
-func (s *Schema) SelectOutboxStreamIDs(ctx context.Context, db DBTX, graceWindow time.Duration, partitions []uint32) ([]Stream, error) {
+func init() {
+	sql.selectOutboxStreamIDs = `
+SELECT event_stream_type, event_stream_id, watermark, event_number, retry_count 
+FROM %s 
+WHERE watermark <> event_number 
+  AND partition = ANY ($1) 
+  AND event_stream_type = ANY ($2) 
+  AND process_at <= now() 
+ORDER BY process_at 
+LIMIT $3;
+
+SELECT stream_type,
+       stream_id,
+       watermark
+FROM {{ .Prefix }}_outbox
+WHERE
+	 watermark <> event_number 
+ AND partition = ANY ($1)
+ AND stream_type = ANY ($2)
+ AND process_at <= now() 
+ORDER BY store_stream_id
+LIMIT $3
+    
+`
+}
+
+func (s *Schema) SelectOutboxStreamIDs(ctx context.Context, db DBTX, graceWindow time.Duration, partitions []uint32) ([]Schema, error) {
 	return nil, nil
+}
+
+func (s *Schema) SelectOutboxWatermark(ctx context.Context, db DBTX, stream Stream) (OutboxWatermark, int64, error) {
+	return OutboxWatermark{}, 0, nil
+}
+
+func (s *Schema) UpdateOutboxWatermark(ctx context.Context, db DBTX, stream Stream, delay time.Duration, watermark OutboxWatermark) error {
+	return nil
 }

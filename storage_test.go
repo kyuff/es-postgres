@@ -1,7 +1,10 @@
 package postgres_test
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"iter"
 	"math/rand"
 	"testing"
 	"time"
@@ -348,5 +351,49 @@ func TestStorage(t *testing.T) {
 			assert.EqualSlice(t, []string{}, got)
 			assert.Equal(t, token, nextToken)
 		})
+	})
+
+	t.Run("StartPublish", func(t *testing.T) {
+		// arrange
+		var (
+			storage = newInstance(t, postgres.WithReconcileInterval(time.Millisecond*100))
+			w       = &WriterMock{}
+
+			streamType = newStreamType()
+			streamID   = newStreamID()
+			events     = newEvents(streamType, streamID, 10)
+		)
+
+		w.WriteFunc = func(ctx context.Context, streamType string, events iter.Seq2[es.Event, error]) error {
+			return nil
+		}
+
+		assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
+
+		go func() {
+			assert.NoError(t, storage.StartPublish(t.Context(), w))
+		}()
+
+		// act
+		err := storage.Write(t.Context(), streamType, seqs.Seq2(events...))
+
+		// assert
+		assert.NoError(t, err)
+		assert.NoErrorEventually(t, time.Second*5, func() error {
+			if len(w.WriteCalls()) == 0 {
+				return errors.New("no events received")
+			}
+
+			if !assert.Equal(t, streamType, w.WriteCalls()[0].StreamType) {
+				return errors.New("wrong stream type")
+			}
+
+			if !assert.EqualSeq2(t, seqs.Seq2(events...), w.WriteCalls()[0].Events, eventsEqual(t)) {
+				return errors.New("wrong events")
+			}
+
+			return nil
+		})
+
 	})
 }
