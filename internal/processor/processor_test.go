@@ -339,7 +339,6 @@ func TestProcess(t *testing.T) {
 
 		w.WriteFunc = func(ctx context.Context, streamType string, events iter.Seq2[es.Event, error]) error {
 			panic("fail")
-			return nil
 		}
 
 		assert.NoPanic(t, func() {
@@ -429,5 +428,4 @@ func TestProcess(t *testing.T) {
 			)
 		}
 	})
-
 }
