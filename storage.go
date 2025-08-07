@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kyuff/es"
 	"github.com/kyuff/es-postgres/internal/database"
+	"github.com/kyuff/es-postgres/internal/processor"
 	"github.com/kyuff/es-postgres/internal/reconcilers"
 	"github.com/kyuff/es-postgres/internal/uuid"
 	"golang.org/x/sync/errgroup"
@@ -172,7 +173,7 @@ func (s *Storage) writeEvents(ctx context.Context, tx database.DBTX, streamType 
 func (s *Storage) StartPublish(ctx context.Context, w es.Writer) error {
 	g, publishCtx := errgroup.WithContext(ctx)
 
-	p := newProcessWriter(s.cfg, s.connector, s.schema, w, s.reader)
+	p := processor.New(s.connector, s.schema, w, s.reader, s.cfg.processBackoff)
 	for _, r := range s.reconciles {
 		g.Go(func() error {
 			return r.Reconcile(publishCtx, p)

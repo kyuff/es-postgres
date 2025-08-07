@@ -7,9 +7,11 @@ import (
 	"context"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kyuff/es"
+	"github.com/kyuff/es-postgres/internal/database"
 	"github.com/kyuff/es-postgres/internal/processor"
 	"iter"
 	"sync"
+	"time"
 )
 
 // Ensure, that ConnectorMock does implement processor.Connector.
@@ -171,5 +173,229 @@ func (mock *ReaderMock) ReadCalls() []struct {
 	mock.lockRead.RLock()
 	calls = mock.calls.Read
 	mock.lockRead.RUnlock()
+	return calls
+}
+
+// Ensure, that SchemaMock does implement processor.Schema.
+// If this is not the case, regenerate this file with moq.
+var _ processor.Schema = &SchemaMock{}
+
+// SchemaMock is a mock implementation of processor.Schema.
+//
+//	func TestSomethingThatUsesSchema(t *testing.T) {
+//
+//		// make and configure a mocked processor.Schema
+//		mockedSchema := &SchemaMock{
+//			SelectOutboxWatermarkFunc: func(ctx context.Context, db database.DBTX, stream database.Stream) (database.OutboxWatermark, int64, error) {
+//				panic("mock out the SelectOutboxWatermark method")
+//			},
+//			UpdateOutboxWatermarkFunc: func(ctx context.Context, db database.DBTX, stream database.Stream, delay time.Duration, watermark database.OutboxWatermark) error {
+//				panic("mock out the UpdateOutboxWatermark method")
+//			},
+//		}
+//
+//		// use mockedSchema in code that requires processor.Schema
+//		// and then make assertions.
+//
+//	}
+type SchemaMock struct {
+	// SelectOutboxWatermarkFunc mocks the SelectOutboxWatermark method.
+	SelectOutboxWatermarkFunc func(ctx context.Context, db database.DBTX, stream database.Stream) (database.OutboxWatermark, int64, error)
+
+	// UpdateOutboxWatermarkFunc mocks the UpdateOutboxWatermark method.
+	UpdateOutboxWatermarkFunc func(ctx context.Context, db database.DBTX, stream database.Stream, delay time.Duration, watermark database.OutboxWatermark) error
+
+	// calls tracks calls to the methods.
+	calls struct {
+		// SelectOutboxWatermark holds details about calls to the SelectOutboxWatermark method.
+		SelectOutboxWatermark []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Db is the db argument value.
+			Db database.DBTX
+			// Stream is the stream argument value.
+			Stream database.Stream
+		}
+		// UpdateOutboxWatermark holds details about calls to the UpdateOutboxWatermark method.
+		UpdateOutboxWatermark []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Db is the db argument value.
+			Db database.DBTX
+			// Stream is the stream argument value.
+			Stream database.Stream
+			// Delay is the delay argument value.
+			Delay time.Duration
+			// Watermark is the watermark argument value.
+			Watermark database.OutboxWatermark
+		}
+	}
+	lockSelectOutboxWatermark sync.RWMutex
+	lockUpdateOutboxWatermark sync.RWMutex
+}
+
+// SelectOutboxWatermark calls SelectOutboxWatermarkFunc.
+func (mock *SchemaMock) SelectOutboxWatermark(ctx context.Context, db database.DBTX, stream database.Stream) (database.OutboxWatermark, int64, error) {
+	if mock.SelectOutboxWatermarkFunc == nil {
+		panic("SchemaMock.SelectOutboxWatermarkFunc: method is nil but Schema.SelectOutboxWatermark was just called")
+	}
+	callInfo := struct {
+		Ctx    context.Context
+		Db     database.DBTX
+		Stream database.Stream
+	}{
+		Ctx:    ctx,
+		Db:     db,
+		Stream: stream,
+	}
+	mock.lockSelectOutboxWatermark.Lock()
+	mock.calls.SelectOutboxWatermark = append(mock.calls.SelectOutboxWatermark, callInfo)
+	mock.lockSelectOutboxWatermark.Unlock()
+	return mock.SelectOutboxWatermarkFunc(ctx, db, stream)
+}
+
+// SelectOutboxWatermarkCalls gets all the calls that were made to SelectOutboxWatermark.
+// Check the length with:
+//
+//	len(mockedSchema.SelectOutboxWatermarkCalls())
+func (mock *SchemaMock) SelectOutboxWatermarkCalls() []struct {
+	Ctx    context.Context
+	Db     database.DBTX
+	Stream database.Stream
+} {
+	var calls []struct {
+		Ctx    context.Context
+		Db     database.DBTX
+		Stream database.Stream
+	}
+	mock.lockSelectOutboxWatermark.RLock()
+	calls = mock.calls.SelectOutboxWatermark
+	mock.lockSelectOutboxWatermark.RUnlock()
+	return calls
+}
+
+// UpdateOutboxWatermark calls UpdateOutboxWatermarkFunc.
+func (mock *SchemaMock) UpdateOutboxWatermark(ctx context.Context, db database.DBTX, stream database.Stream, delay time.Duration, watermark database.OutboxWatermark) error {
+	if mock.UpdateOutboxWatermarkFunc == nil {
+		panic("SchemaMock.UpdateOutboxWatermarkFunc: method is nil but Schema.UpdateOutboxWatermark was just called")
+	}
+	callInfo := struct {
+		Ctx       context.Context
+		Db        database.DBTX
+		Stream    database.Stream
+		Delay     time.Duration
+		Watermark database.OutboxWatermark
+	}{
+		Ctx:       ctx,
+		Db:        db,
+		Stream:    stream,
+		Delay:     delay,
+		Watermark: watermark,
+	}
+	mock.lockUpdateOutboxWatermark.Lock()
+	mock.calls.UpdateOutboxWatermark = append(mock.calls.UpdateOutboxWatermark, callInfo)
+	mock.lockUpdateOutboxWatermark.Unlock()
+	return mock.UpdateOutboxWatermarkFunc(ctx, db, stream, delay, watermark)
+}
+
+// UpdateOutboxWatermarkCalls gets all the calls that were made to UpdateOutboxWatermark.
+// Check the length with:
+//
+//	len(mockedSchema.UpdateOutboxWatermarkCalls())
+func (mock *SchemaMock) UpdateOutboxWatermarkCalls() []struct {
+	Ctx       context.Context
+	Db        database.DBTX
+	Stream    database.Stream
+	Delay     time.Duration
+	Watermark database.OutboxWatermark
+} {
+	var calls []struct {
+		Ctx       context.Context
+		Db        database.DBTX
+		Stream    database.Stream
+		Delay     time.Duration
+		Watermark database.OutboxWatermark
+	}
+	mock.lockUpdateOutboxWatermark.RLock()
+	calls = mock.calls.UpdateOutboxWatermark
+	mock.lockUpdateOutboxWatermark.RUnlock()
+	return calls
+}
+
+// Ensure, that WriterMock does implement processor.Writer.
+// If this is not the case, regenerate this file with moq.
+var _ processor.Writer = &WriterMock{}
+
+// WriterMock is a mock implementation of processor.Writer.
+//
+//	func TestSomethingThatUsesWriter(t *testing.T) {
+//
+//		// make and configure a mocked processor.Writer
+//		mockedWriter := &WriterMock{
+//			WriteFunc: func(ctx context.Context, streamType string, events iter.Seq2[es.Event, error]) error {
+//				panic("mock out the Write method")
+//			},
+//		}
+//
+//		// use mockedWriter in code that requires processor.Writer
+//		// and then make assertions.
+//
+//	}
+type WriterMock struct {
+	// WriteFunc mocks the Write method.
+	WriteFunc func(ctx context.Context, streamType string, events iter.Seq2[es.Event, error]) error
+
+	// calls tracks calls to the methods.
+	calls struct {
+		// Write holds details about calls to the Write method.
+		Write []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// StreamType is the streamType argument value.
+			StreamType string
+			// Events is the events argument value.
+			Events iter.Seq2[es.Event, error]
+		}
+	}
+	lockWrite sync.RWMutex
+}
+
+// Write calls WriteFunc.
+func (mock *WriterMock) Write(ctx context.Context, streamType string, events iter.Seq2[es.Event, error]) error {
+	if mock.WriteFunc == nil {
+		panic("WriterMock.WriteFunc: method is nil but Writer.Write was just called")
+	}
+	callInfo := struct {
+		Ctx        context.Context
+		StreamType string
+		Events     iter.Seq2[es.Event, error]
+	}{
+		Ctx:        ctx,
+		StreamType: streamType,
+		Events:     events,
+	}
+	mock.lockWrite.Lock()
+	mock.calls.Write = append(mock.calls.Write, callInfo)
+	mock.lockWrite.Unlock()
+	return mock.WriteFunc(ctx, streamType, events)
+}
+
+// WriteCalls gets all the calls that were made to Write.
+// Check the length with:
+//
+//	len(mockedWriter.WriteCalls())
+func (mock *WriterMock) WriteCalls() []struct {
+	Ctx        context.Context
+	StreamType string
+	Events     iter.Seq2[es.Event, error]
+} {
+	var calls []struct {
+		Ctx        context.Context
+		StreamType string
+		Events     iter.Seq2[es.Event, error]
+	}
+	mock.lockWrite.RLock()
+	calls = mock.calls.Write
+	mock.lockWrite.RUnlock()
 	return calls
 }
