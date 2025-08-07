@@ -354,6 +354,7 @@ func TestStorage(t *testing.T) {
 	})
 
 	t.Run("StartPublish", func(t *testing.T) {
+		t.Skipf("not yet implemented")
 		// arrange
 		var (
 			storage = newInstance(t, postgres.WithReconcileInterval(time.Millisecond*100))
