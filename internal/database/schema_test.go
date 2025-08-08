@@ -35,13 +35,16 @@ func TestSchema(t *testing.T) {
 		newPartitions = func(partitions ...uint32) []uint32 {
 			return partitions
 		}
+		newStream = func(streamType string, storeStreamID string) database.Stream {
+			return database.Stream{
+				StoreID: storeStreamID,
+				Type:    streamType,
+			}
+		}
 		newStreams = func(streamType string, count int) []database.Stream {
 			var s []database.Stream
 			for _, storeStreamID := range uuid.V7At(time.Now(), count) {
-				s = append(s, database.Stream{
-					StoreID: storeStreamID,
-					Type:    streamType,
-				})
+				s = append(s, newStream(streamType, storeStreamID))
 			}
 			return s
 		}
@@ -630,7 +633,47 @@ func TestSchema(t *testing.T) {
 	})
 
 	t.Run("SelectOutboxWatermark", func(t *testing.T) {
+		t.Run("read watermark", func(t *testing.T) {
+			// arrange
+			var (
+				conn, schema  = newSchema(t)
+				streamType    = newStreamType()
+				streamID      = newStreamID()
+				storeStreamID = newStoreStreamID()
+				stream        = newStream(streamType, storeStreamID)
+			)
 
+			_, err := schema.InsertOutbox(t.Context(), conn, stream.Type, streamID, stream.StoreID, 300, 1, 42)
+			assert.NoError(t, err)
+			assert.NoError(t, schema.UpdateOutboxWatermark(t.Context(), conn, stream, 0, database.OutboxWatermark{
+				Watermark:  1,
+				RetryCount: 20,
+			}))
+
+			// act
+			watermark, eventNumber, err := schema.SelectOutboxWatermark(t.Context(), conn, stream)
+
+			// assert
+			assert.NoError(t, err)
+			assert.Equalf(t, int64(1), watermark.Watermark, "Watermark")
+			assert.Equalf(t, int64(20), watermark.RetryCount, "RetryCount")
+			assert.Equalf(t, int64(300), eventNumber, "eventNumber")
+		})
+
+		t.Run("fail with no stream", func(t *testing.T) {
+			// arrange
+			var (
+				conn, schema  = newSchema(t)
+				streamType    = newStreamType()
+				storeStreamID = newStoreStreamID()
+				stream        = newStream(streamType, storeStreamID)
+			)
+			// act
+			_, _, err := schema.SelectOutboxWatermark(t.Context(), conn, stream)
+
+			// assert
+			assert.Error(t, err)
+		})
 	})
 
 	t.Run("UpdateOutboxWatermark", func(t *testing.T) {

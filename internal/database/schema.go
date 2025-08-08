@@ -208,7 +208,14 @@ INSERT INTO {{ .Prefix }}_outbox (
 }
 
 func (s *Schema) InsertOutbox(ctx context.Context, tx DBTX, streamType, streamID, storeStreamID string, eventNumber, watermark int64, partition uint32) (int64, error) {
-	affected, err := tx.Exec(ctx, sql.insertOutbox, streamType, streamID, storeStreamID, eventNumber, watermark, partition)
+	affected, err := tx.Exec(ctx, sql.insertOutbox,
+		streamType,
+		streamID,
+		storeStreamID,
+		eventNumber,
+		watermark,
+		partition,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -318,11 +325,25 @@ func (s *Schema) SelectOutboxStreamIDs(ctx context.Context, db DBTX, graceWindow
 
 func init() {
 	sql.selectOutboxWatermark = `
-
+SELECT 
+	event_number,
+	watermark,
+	retry_count
+FROM {{ .Prefix }}_outbox
+WHERE
+    stream_type = $1
+AND store_stream_id = $2;
 `
 }
 func (s *Schema) SelectOutboxWatermark(ctx context.Context, db DBTX, stream Stream) (OutboxWatermark, int64, error) {
-	return OutboxWatermark{}, 0, nil
+	var (
+		row         = db.QueryRow(ctx, sql.selectOutboxWatermark, stream.Type, stream.StoreID)
+		w           OutboxWatermark
+		eventNumber int64
+	)
+
+	err := row.Scan(&eventNumber, &w.Watermark, &w.RetryCount)
+	return w, eventNumber, err
 }
 
 func init() {
