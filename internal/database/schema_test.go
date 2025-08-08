@@ -677,6 +677,51 @@ func TestSchema(t *testing.T) {
 	})
 
 	t.Run("UpdateOutboxWatermark", func(t *testing.T) {
+		t.Run("update existing stream", func(t *testing.T) {
+			// arrange
+			var (
+				conn, schema  = newSchema(t)
+				streamType    = newStreamType()
+				streamID      = newStreamID()
+				storeStreamID = newStoreStreamID()
+				stream        = newStream(streamType, storeStreamID)
+				delay         = time.Millisecond
+			)
 
+			_, err := schema.InsertOutbox(t.Context(), conn, stream.Type, streamID, stream.StoreID, 300, 1, 42)
+			assert.NoError(t, err)
+
+			// act
+			err = schema.UpdateOutboxWatermark(t.Context(), conn, stream, delay, database.OutboxWatermark{
+				Watermark:  10,
+				RetryCount: 20,
+			})
+
+			// assert
+			assert.NoError(t, err)
+			got, _, err := schema.SelectOutboxWatermark(t.Context(), conn, stream)
+			assert.NoError(t, err)
+			assert.Equalf(t, 10, got.Watermark, "Watermark")
+			assert.Equalf(t, 20, got.RetryCount, "RetryCount")
+		})
+		t.Run("fail on missing stream", func(t *testing.T) {
+			// arrange
+			var (
+				conn, schema  = newSchema(t)
+				streamType    = newStreamType()
+				storeStreamID = newStoreStreamID()
+				stream        = newStream(streamType, storeStreamID)
+				delay         = time.Millisecond
+			)
+
+			// act
+			err := schema.UpdateOutboxWatermark(t.Context(), conn, stream, delay, database.OutboxWatermark{
+				Watermark:  10,
+				RetryCount: 20,
+			})
+
+			// assert
+			assert.Error(t, err)
+		})
 	})
 }

@@ -358,12 +358,19 @@ WHERE stream_type = $1
 `
 }
 func (s *Schema) UpdateOutboxWatermark(ctx context.Context, db DBTX, stream Stream, delay time.Duration, watermark OutboxWatermark) error {
-	_, err := db.Exec(ctx, sql.updateOutboxWatermark,
+	tag, err := db.Exec(ctx, sql.updateOutboxWatermark,
 		stream.Type,
 		stream.StoreID,
 		time.Now().Add(delay),
 		watermark.Watermark,
 		watermark.RetryCount,
 	)
+	if err != nil {
+		return err
+	}
+
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("stream %q not watermark updated", stream.Type)
+	}
 	return err
 }
