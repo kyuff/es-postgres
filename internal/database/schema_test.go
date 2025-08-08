@@ -22,9 +22,10 @@ func (MockEvent) EventName() string {
 
 func TestSchema(t *testing.T) {
 	var (
-		newStreamType = uuid.V7
-		newStreamID   = uuid.V7
-		newSchema     = func(t *testing.T) (*pgxpool.Pool, *database.Schema) {
+		newStreamType    = uuid.V7
+		newStreamID      = uuid.V7
+		newStoreStreamID = uuid.V7
+		newSchema        = func(t *testing.T) (*pgxpool.Pool, *database.Schema) {
 			dsn := database.DSNTest(t)
 			pool, err := database.Connect(t.Context(), dsn)
 			if !assert.NoError(t, err) {
@@ -209,4 +210,115 @@ func TestSchema(t *testing.T) {
 		assert.NoError(t, err)
 		assertEqualEventsInRow(t, nil, rows)
 	})
+
+	t.Run("insert outbox successfully", func(t *testing.T) {
+		// arrange
+		var (
+			conn, schema         = newSchema(t)
+			streamType           = newStreamType()
+			streamID             = newStreamID()
+			storeStreamID        = newStoreStreamID()
+			eventNumber   int64  = 3
+			watermark     int64  = 3
+			partition     uint32 = 5
+		)
+
+		// act
+		affected, err := schema.InsertOutbox(t.Context(), conn, streamType, streamID, storeStreamID, eventNumber, watermark, partition)
+
+		// assert
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), affected)
+	})
+
+	t.Run("insert outbox fails on second insert", func(t *testing.T) {
+		// arrange
+		var (
+			conn, schema         = newSchema(t)
+			streamType           = newStreamType()
+			streamID             = newStreamID()
+			storeStreamID        = newStoreStreamID()
+			eventNumber   int64  = 3
+			watermark     int64  = 3
+			partition     uint32 = 5
+		)
+
+		if _, err := schema.InsertOutbox(t.Context(), conn, streamType, streamID, storeStreamID, eventNumber, watermark, partition); err != nil {
+			t.Fatal(err)
+		}
+
+		// act
+		affected, err := schema.InsertOutbox(t.Context(), conn, streamType, streamID, storeStreamID, eventNumber, watermark, partition)
+
+		// assert
+		assert.Error(t, err)
+		assert.Equal(t, int64(0), affected)
+	})
+
+	t.Run("update outbox succeeds", func(t *testing.T) {
+		// arrange
+		var (
+			conn, schema         = newSchema(t)
+			streamType           = newStreamType()
+			streamID             = newStreamID()
+			storeStreamID        = newStoreStreamID()
+			eventNumber   int64  = 3
+			watermark     int64  = 3
+			partition     uint32 = 5
+		)
+
+		if _, err := schema.InsertOutbox(t.Context(), conn, streamType, streamID, storeStreamID, eventNumber, watermark, partition); err != nil {
+			t.Fatal(err)
+		}
+
+		// act
+		affected, err := schema.UpdateOutbox(t.Context(), conn, streamType, streamID, eventNumber+1, eventNumber)
+
+		// assert
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), affected)
+	})
+
+	t.Run("update outbox affects nothing on no stream", func(t *testing.T) {
+		// arrange
+		var (
+			conn, schema       = newSchema(t)
+			streamType         = newStreamType()
+			streamID           = newStreamID()
+			eventNumber  int64 = 3
+		)
+
+		// act
+		affected, err := schema.UpdateOutbox(t.Context(), conn, streamType, streamID, eventNumber, 0)
+
+		// assert
+		assert.NoError(t, err)
+		assert.Equal(t, int64(0), affected)
+	})
+
+	t.Run("update outbox affects nothing on wrong last event number", func(t *testing.T) {
+		// arrange
+		var (
+			conn, schema            = newSchema(t)
+			streamType              = newStreamType()
+			streamID                = newStreamID()
+			storeStreamID           = newStoreStreamID()
+			eventNumber      int64  = 3
+			watermark        int64  = 3
+			partition        uint32 = 5
+			wrongEventNumber        = eventNumber + 42
+		)
+
+		if _, err := schema.InsertOutbox(t.Context(), conn, streamType, streamID, storeStreamID, eventNumber, watermark, partition); err != nil {
+			t.Fatal(err)
+		}
+
+		// act
+		affected, err := schema.UpdateOutbox(t.Context(), conn, streamType, streamID, eventNumber+1, wrongEventNumber)
+
+		// assert
+		assert.NoError(t, err)
+		assert.Equal(t, int64(0), affected)
+	})
+
 }

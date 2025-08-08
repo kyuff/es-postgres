@@ -156,12 +156,7 @@ ORDER BY event_number ASC
 }
 
 func (s *Schema) SelectEvents(ctx context.Context, db DBTX, streamType string, streamID string, eventNumber int64) (pgx.Rows, error) {
-	rows, err := db.Query(ctx, sql.selectEvents, streamType, streamID, eventNumber)
-	if err != nil {
-		return nil, err
-	}
-
-	return rows, nil
+	return db.Query(ctx, sql.selectEvents, streamType, streamID, eventNumber)
 }
 
 func init() {
