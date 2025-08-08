@@ -1,10 +1,11 @@
 package database_test
 
 import (
-	"fmt"
+	"encoding/json"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kyuff/es"
 	"github.com/kyuff/es-postgres/internal/assert"
@@ -21,7 +22,9 @@ func (MockEvent) EventName() string {
 
 func TestSchema(t *testing.T) {
 	var (
-		newSchema = func(t *testing.T) (*pgxpool.Pool, *database.Schema) {
+		newStreamType = uuid.V7
+		newStreamID   = uuid.V7
+		newSchema     = func(t *testing.T) (*pgxpool.Pool, *database.Schema) {
 			dsn := database.DSNTest(t)
 			pool, err := database.Connect(t.Context(), dsn)
 			if !assert.NoError(t, err) {
@@ -39,12 +42,13 @@ func TestSchema(t *testing.T) {
 		}
 		newEvent = func(eventNumber int64, mods ...func(e *es.Event)) es.Event {
 			e := es.Event{
-				StreamID:     fmt.Sprintf("StreamID-%d", eventNumber),
-				StreamType:   fmt.Sprintf("StreamType-%d", eventNumber),
-				EventNumber:  eventNumber,
-				StoreEventID: uuid.V7(),
-				EventTime:    time.Now().Add(time.Second * time.Duration(eventNumber)).Truncate(time.Second),
-				Content:      MockEvent{},
+				StreamID:      uuid.V7(),
+				StreamType:    uuid.V7(),
+				EventNumber:   eventNumber,
+				EventTime:     time.Now().Add(time.Second * time.Duration(eventNumber)).Truncate(time.Second),
+				Content:       MockEvent{},
+				StoreEventID:  uuid.V7(),
+				StoreStreamID: uuid.V7(),
 			}
 			for _, mod := range mods {
 				mod(&e)
@@ -52,28 +56,55 @@ func TestSchema(t *testing.T) {
 
 			return e
 		}
-		newEvents = func(stream database.Stream, count int) []es.Event {
+		newEvents = func(streamType, streamID string, count int) []es.Event {
 			var events []es.Event
-			var streamType = stream.Type
-			var streamID = uuid.V7()
-			var storeEventIDs = uuid.V7At(time.Now(), count)
 			for i := 1; i <= count; i++ {
 				events = append(events, newEvent(int64(i), func(e *es.Event) {
 					e.StreamType = streamType
 					e.StreamID = streamID
-					e.StoreEventID = storeEventIDs[i-1]
-					e.StoreStreamID = stream.StoreID
-					e.Content = MockEvent{}
 				}))
 			}
 
 			return events
 		}
-		newStream = func() database.Stream {
-			return database.Stream{
-				StoreID: uuid.V7(),
-				Type:    uuid.V7(),
+		writeEvents = func(t *testing.T, db database.DBTX, schema *database.Schema, events []es.Event) {
+			for _, event := range events {
+				assert.NoError(t, schema.WriteEvent(t.Context(), db, event))
 			}
+		}
+		assertEqualEventsInRow = func(t *testing.T, expected []es.Event, rows pgx.Rows) {
+			t.Helper()
+			n := 0
+			for rows.Next() {
+				var got es.Event
+				var contentName string
+				var content json.RawMessage
+				var metadata json.RawMessage
+				err := rows.Scan(
+					&got.StreamType,
+					&got.StreamID,
+					&got.EventNumber,
+					&got.EventTime,
+					&got.StoreEventID,
+					&got.StoreStreamID,
+					&contentName,
+					&content,
+					&metadata,
+				)
+				if assert.NoError(t, err) {
+					assert.Equalf(t, expected[n].StreamType, got.StreamType, "StreamType")
+					assert.Equalf(t, expected[n].StreamID, got.StreamID, "StreamID")
+					assert.Equalf(t, expected[n].EventNumber, got.EventNumber, "EventNumber")
+					assert.Equalf(t, expected[n].EventTime, got.EventTime, "EventTime")
+					assert.Equalf(t, expected[n].StoreEventID, got.StoreEventID, "StoreEventID")
+					assert.Equalf(t, expected[n].StoreStreamID, got.StoreStreamID, "StoreStreamID")
+					assert.Equalf(t, expected[n].Content.EventName(), contentName, "Content")
+					assert.NotNil(t, content)
+					assert.NotNil(t, metadata)
+				}
+				n++
+			}
+			assert.Equalf(t, len(expected), n, "number of events")
 		}
 	)
 
@@ -95,8 +126,9 @@ func TestSchema(t *testing.T) {
 		// arrange
 		var (
 			conn, schema = newSchema(t)
-			stream       = newStream()
-			events       = newEvents(stream, 1)
+			streamType   = newStreamType()
+			streamID     = newStreamID()
+			events       = newEvents(streamType, streamID, 1)
 		)
 
 		// act
@@ -110,8 +142,9 @@ func TestSchema(t *testing.T) {
 		// arrange
 		var (
 			conn, schema = newSchema(t)
-			stream       = newStream()
-			events       = newEvents(stream, 1)
+			streamType   = newStreamType()
+			streamID     = newStreamID()
+			events       = newEvents(streamType, streamID, 1)
 		)
 
 		assert.NoError(t, schema.WriteEvent(t.Context(), conn, events[0]))
@@ -121,5 +154,59 @@ func TestSchema(t *testing.T) {
 
 		// assert
 		assert.Error(t, err)
+	})
+
+	t.Run("select all events successfully", func(t *testing.T) {
+		// arrange
+		var (
+			conn, schema = newSchema(t)
+			streamType   = newStreamType()
+			streamID     = newStreamID()
+			events       = newEvents(streamType, streamID, 10)
+		)
+
+		writeEvents(t, conn, schema, events)
+
+		// act
+		rows, err := schema.SelectEvents(t.Context(), conn, streamType, streamID, 0)
+
+		// assert
+		assert.NoError(t, err)
+		assertEqualEventsInRow(t, events, rows)
+	})
+
+	t.Run("select event tail successfully", func(t *testing.T) {
+		// arrange
+		var (
+			conn, schema = newSchema(t)
+			streamType   = newStreamType()
+			streamID     = newStreamID()
+			events       = newEvents(streamType, streamID, 10)
+		)
+
+		writeEvents(t, conn, schema, events)
+
+		// act
+		rows, err := schema.SelectEvents(t.Context(), conn, streamType, streamID, 5)
+
+		// assert
+		assert.NoError(t, err)
+		assertEqualEventsInRow(t, events[5:], rows)
+	})
+
+	t.Run("select empty event stream", func(t *testing.T) {
+		// arrange
+		var (
+			conn, schema = newSchema(t)
+			streamType   = newStreamType()
+			streamID     = newStreamID()
+		)
+
+		// act
+		rows, err := schema.SelectEvents(t.Context(), conn, streamType, streamID, 0)
+
+		// assert
+		assert.NoError(t, err)
+		assertEqualEventsInRow(t, nil, rows)
 	})
 }
