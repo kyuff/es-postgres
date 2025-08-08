@@ -7,10 +7,10 @@ import (
 	"time"
 )
 
-// schemaName returns a 10-character string composed of:
+// nameSchema returns a 10-character string composed of:
 // - 5-char stable hash (consistent per input)
 // - 5-char time-based value (newer => sorts earlier)
-func schemaName(input string) string {
+func nameSchema(input string) string {
 	// Stable hash: SHA-1, base32-encoded
 	h := sha1.Sum([]byte(input))
 	hash := base32.StdEncoding.EncodeToString(h[:])
