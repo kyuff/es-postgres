@@ -24,6 +24,8 @@ type sqlQueries struct {
 	updateOutbox           string
 	selectStreamIDs        string
 	selectOutboxStreamIDs  string
+	selectOutboxWatermark  string
+	updateOutboxWatermark  string
 }
 
 func NewSchema(prefix string) (*Schema, error) {
@@ -39,6 +41,8 @@ func NewSchema(prefix string) (*Schema, error) {
 		&sql.updateOutbox,
 		&sql.selectStreamIDs,
 		&sql.selectOutboxStreamIDs,
+		&sql.selectOutboxWatermark,
+		&sql.updateOutboxWatermark,
 	)
 	if err != nil {
 		return nil, err
@@ -280,16 +284,18 @@ WHERE
  AND store_stream_id > $2
  AND process_at <= $3
 ORDER BY store_stream_id
-LIMIT $4
-    
+LIMIT $4    
 `
 }
 
 func (s *Schema) SelectOutboxStreamIDs(ctx context.Context, db DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]Stream, error) {
+	if token == "" {
+		token = uuid.Empty
+	}
 	rows, err := db.Query(ctx, sql.selectOutboxStreamIDs,
 		partitions,
-		time.Now().Add(-graceWindow),
 		token,
+		time.Now().Add(-graceWindow),
 		limit,
 	)
 	if err != nil {
@@ -310,10 +316,33 @@ func (s *Schema) SelectOutboxStreamIDs(ctx context.Context, db DBTX, graceWindow
 	return result, nil
 }
 
+func init() {
+	sql.selectOutboxWatermark = `
+
+`
+}
 func (s *Schema) SelectOutboxWatermark(ctx context.Context, db DBTX, stream Stream) (OutboxWatermark, int64, error) {
 	return OutboxWatermark{}, 0, nil
 }
 
+func init() {
+	sql.updateOutboxWatermark = `
+UPDATE {{ .Prefix }}_outbox
+SET 
+	watermark = $4,
+    retry_count = $5,
+    process_at = $3
+WHERE stream_type = $1
+  AND store_stream_id = $2
+`
+}
 func (s *Schema) UpdateOutboxWatermark(ctx context.Context, db DBTX, stream Stream, delay time.Duration, watermark OutboxWatermark) error {
-	return nil
+	_, err := db.Exec(ctx, sql.updateOutboxWatermark,
+		stream.Type,
+		stream.StoreID,
+		time.Now().Add(delay),
+		watermark.Watermark,
+		watermark.RetryCount,
+	)
+	return err
 }

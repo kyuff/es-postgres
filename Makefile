@@ -24,5 +24,5 @@ up:
 	docker compose up -d --wait
 
 down:
-	docker compose down --remove-orphans
+	docker compose down --remove-orphans --volumes
 

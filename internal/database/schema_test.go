@@ -32,6 +32,19 @@ func TestSchema(t *testing.T) {
 			}
 			return ids
 		}
+		newPartitions = func(partitions ...uint32) []uint32 {
+			return partitions
+		}
+		newStreams = func(streamType string, count int) []database.Stream {
+			var s []database.Stream
+			for _, storeStreamID := range uuid.V7At(time.Now(), count) {
+				s = append(s, database.Stream{
+					StoreID: storeStreamID,
+					Type:    streamType,
+				})
+			}
+			return s
+		}
 		newSchema = func(t *testing.T) (*pgxpool.Pool, *database.Schema) {
 			dsn := database.DSNTest(t)
 			pool, err := database.Connect(t.Context(), dsn)
@@ -113,6 +126,14 @@ func TestSchema(t *testing.T) {
 				n++
 			}
 			assert.Equalf(t, len(expected), n, "number of events")
+		}
+		insertOutbox = func(t *testing.T, conn database.DBTX, schema *database.Schema, streams []database.Stream, eventNumber, watermark int64, partition uint32) {
+			streamIDs := newStreamIDs(len(streams))
+			for i, stream := range streams {
+				if _, err := schema.InsertOutbox(t.Context(), conn, stream.Type, streamIDs[i], stream.StoreID, eventNumber, watermark, partition); err != nil {
+					t.Fatal(err)
+				}
+			}
 		}
 	)
 
@@ -450,7 +471,162 @@ func TestSchema(t *testing.T) {
 	})
 
 	t.Run("SelectOutboxStreamIDs", func(t *testing.T) {
+		t.Run("read streams that have lower watermark", func(t *testing.T) {
+			// arrange
+			var (
+				conn, schema = newSchema(t)
+				streamType   = newStreamType()
+				count        = 10
+				streams      = newStreams(streamType, count)
+				token        = ""
+				grace        = time.Millisecond * 0
+				partitions   = newPartitions(1)
+				limit        = 100
+			)
 
+			insertOutbox(t, conn, schema, streams, 2, 1, 1)
+
+			// act
+			got, err := schema.SelectOutboxStreamIDs(t.Context(), conn, grace, partitions, token, limit)
+
+			// assert
+			assert.NoError(t, err)
+			assert.EqualSlice(t, streams, got)
+		})
+
+		t.Run("ignore streams that have watermark equal to event number", func(t *testing.T) {
+			// arrange
+			var (
+				conn, schema = newSchema(t)
+				streamType   = newStreamType()
+				count        = 10
+				streams      = newStreams(streamType, count)
+				ignored      = newStreams(streamType, count)
+				token        = ""
+				grace        = time.Millisecond * 0
+				partitions   = newPartitions(1)
+				limit        = 100
+			)
+
+			insertOutbox(t, conn, schema, streams, 2, 1, 1)
+			insertOutbox(t, conn, schema, ignored, 2, 2, 1)
+
+			// act
+			got, err := schema.SelectOutboxStreamIDs(t.Context(), conn, grace, partitions, token, limit)
+
+			// assert
+			assert.NoError(t, err)
+			assert.EqualSlice(t, streams, got)
+		})
+
+		t.Run("ignore streams that have wrong partition", func(t *testing.T) {
+			// arrange
+			var (
+				conn, schema = newSchema(t)
+				streamType   = newStreamType()
+				count        = 10
+				streams      = newStreams(streamType, count)
+				ignored      = newStreams(streamType, count)
+				token        = ""
+				grace        = time.Millisecond * 0
+				partitions   = newPartitions(1, 2, 3)
+				limit        = 100
+			)
+
+			insertOutbox(t, conn, schema, streams, 2, 1, 1)
+			insertOutbox(t, conn, schema, ignored, 2, 2, 42)
+
+			// act
+			got, err := schema.SelectOutboxStreamIDs(t.Context(), conn, grace, partitions, token, limit)
+
+			// assert
+			assert.NoError(t, err)
+			assert.EqualSlice(t, streams, got)
+		})
+
+		t.Run("read until limit", func(t *testing.T) {
+			// arrange
+			var (
+				conn, schema = newSchema(t)
+				streamType   = newStreamType()
+				count        = 10
+				streams      = newStreams(streamType, count)
+				token        = ""
+				grace        = time.Millisecond * 0
+				partitions   = newPartitions(1)
+				limit        = 5
+			)
+
+			insertOutbox(t, conn, schema, streams, 2, 1, 1)
+
+			// act
+			got, err := schema.SelectOutboxStreamIDs(t.Context(), conn, grace, partitions, token, limit)
+
+			// assert
+			assert.NoError(t, err)
+			assert.EqualSlice(t, streams[:limit], got)
+		})
+
+		t.Run("read from token", func(t *testing.T) {
+			// arrange
+			var (
+				conn, schema = newSchema(t)
+				streamType   = newStreamType()
+				count        = 10
+				streams      = newStreams(streamType, count)
+				start        = 5
+				token        = streams[start-1].StoreID
+				grace        = time.Millisecond * 0
+				partitions   = newPartitions(1)
+				limit        = 100
+			)
+
+			insertOutbox(t, conn, schema, streams, 2, 1, 1)
+
+			// act
+			got, err := schema.SelectOutboxStreamIDs(t.Context(), conn, grace, partitions, token, limit)
+
+			// assert
+			assert.NoError(t, err)
+			assert.EqualSlice(t, streams[start:], got)
+		})
+
+		t.Run("allow a grace period", func(t *testing.T) {
+			// arrange
+			var (
+				conn, schema = newSchema(t)
+				streamType   = newStreamType()
+				count        = 10
+				streams      = newStreams(streamType, count)
+				start        = 5
+				token        = ""
+				grace        = time.Millisecond * 100
+				partitions   = newPartitions(1)
+				limit        = 100
+			)
+
+			insertOutbox(t, conn, schema, streams, 2, 1, 1)
+			for i, stream := range streams {
+				var delay time.Duration = 0
+				if i >= start {
+					delay = -grace * 10
+				}
+				err := schema.UpdateOutboxWatermark(t.Context(), conn, stream, delay, database.OutboxWatermark{
+					Watermark:  1,
+					RetryCount: 1,
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// act
+			got, err := schema.SelectOutboxStreamIDs(t.Context(), conn, grace, partitions, token, limit)
+
+			// assert
+			assert.NoError(t, err)
+			assert.EqualSlice(t, streams[start:], got)
+		})
 	})
 
 	t.Run("SelectOutboxWatermark", func(t *testing.T) {
