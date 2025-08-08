@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/kyuff/es"
+	"github.com/kyuff/es-postgres/internal/uuid"
 )
 
 var sql = sqlQueries{}
@@ -241,6 +242,9 @@ LIMIT $3;`
 }
 
 func (s *Schema) SelectStreamIDs(ctx context.Context, db DBTX, streamType string, token string, limit int64) ([]string, string, error) {
+	if token == "" {
+		token = uuid.Empty
+	}
 	rows, err := db.Query(ctx, sql.selectStreamIDs, token, streamType, limit)
 	if err != nil {
 		return nil, "", err
