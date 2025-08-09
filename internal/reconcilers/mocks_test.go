@@ -304,3 +304,75 @@ func (mock *ProcessorMock) ProcessCalls() []struct {
 	mock.lockProcess.RUnlock()
 	return calls
 }
+
+// Ensure, that ReconcilerMock does implement reconcilers.Reconciler.
+// If this is not the case, regenerate this file with moq.
+var _ reconcilers.Reconciler = &ReconcilerMock{}
+
+// ReconcilerMock is a mock implementation of reconcilers.Reconciler.
+//
+//	func TestSomethingThatUsesReconciler(t *testing.T) {
+//
+//		// make and configure a mocked reconcilers.Reconciler
+//		mockedReconciler := &ReconcilerMock{
+//			ReconcileFunc: func(ctx context.Context, p reconcilers.Processor) error {
+//				panic("mock out the Reconcile method")
+//			},
+//		}
+//
+//		// use mockedReconciler in code that requires reconcilers.Reconciler
+//		// and then make assertions.
+//
+//	}
+type ReconcilerMock struct {
+	// ReconcileFunc mocks the Reconcile method.
+	ReconcileFunc func(ctx context.Context, p reconcilers.Processor) error
+
+	// calls tracks calls to the methods.
+	calls struct {
+		// Reconcile holds details about calls to the Reconcile method.
+		Reconcile []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// P is the p argument value.
+			P reconcilers.Processor
+		}
+	}
+	lockReconcile sync.RWMutex
+}
+
+// Reconcile calls ReconcileFunc.
+func (mock *ReconcilerMock) Reconcile(ctx context.Context, p reconcilers.Processor) error {
+	if mock.ReconcileFunc == nil {
+		panic("ReconcilerMock.ReconcileFunc: method is nil but Reconciler.Reconcile was just called")
+	}
+	callInfo := struct {
+		Ctx context.Context
+		P   reconcilers.Processor
+	}{
+		Ctx: ctx,
+		P:   p,
+	}
+	mock.lockReconcile.Lock()
+	mock.calls.Reconcile = append(mock.calls.Reconcile, callInfo)
+	mock.lockReconcile.Unlock()
+	return mock.ReconcileFunc(ctx, p)
+}
+
+// ReconcileCalls gets all the calls that were made to Reconcile.
+// Check the length with:
+//
+//	len(mockedReconciler.ReconcileCalls())
+func (mock *ReconcilerMock) ReconcileCalls() []struct {
+	Ctx context.Context
+	P   reconcilers.Processor
+} {
+	var calls []struct {
+		Ctx context.Context
+		P   reconcilers.Processor
+	}
+	mock.lockReconcile.RLock()
+	calls = mock.calls.Reconcile
+	mock.lockReconcile.RUnlock()
+	return calls
+}
