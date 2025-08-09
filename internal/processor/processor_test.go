@@ -117,6 +117,7 @@ func TestProcess(t *testing.T) {
 			return database.OutboxWatermark{
 				Watermark:  watermark,
 				RetryCount: retryCount,
+				StreamID:   uuid.V7(),
 			}
 		}
 
@@ -126,8 +127,10 @@ func TestProcess(t *testing.T) {
 			}
 		}
 
-		readerFunc = func(events []es.Event, errs ...error) func(ctx context.Context, streamType string, streamID string, eventNumber int64) iter.Seq2[es.Event, error] {
-			return func(ctx context.Context, streamType string, streamID string, eventNumber int64) iter.Seq2[es.Event, error] {
+		readerFunc = func(streamType, streamID string, events []es.Event, errs ...error) func(ctx context.Context, streamType string, streamID string, eventNumber int64) iter.Seq2[es.Event, error] {
+			return func(ctx context.Context, typ string, id string, eventNumber int64) iter.Seq2[es.Event, error] {
+				assert.Equalf(t, streamType, typ, "streamType")
+				assert.Equalf(t, streamID, id, "streamType")
 				return seqs.Concat2(seqs.Seq2(events...), seqs.Error2[es.Event](errs...))
 			}
 		}
@@ -177,7 +180,7 @@ func TestProcess(t *testing.T) {
 		conn.AcquireWriteStreamFunc = acquireWriteStream(&pgxpool.Conn{}, nil)
 		schema.SelectOutboxWatermarkFunc = selectWatermark(watermark, 3, nil)
 		schema.UpdateOutboxWatermarkFunc = updateWatermark(nil)
-		rd.ReadFunc = readerFunc(events)
+		rd.ReadFunc = readerFunc(stream.Type, watermark.StreamID, events)
 
 		w.WriteFunc = func(ctx context.Context, streamType string, events iter.Seq2[es.Event, error]) error {
 			for event := range events {
@@ -198,7 +201,11 @@ func TestProcess(t *testing.T) {
 		assert.EqualSlice(t, events[0:1], got)
 		if assert.Equal(t, 1, len(schema.UpdateOutboxWatermarkCalls())) {
 			assert.Equal(t,
-				newWatermark(watermark.Watermark, watermark.RetryCount+1),
+				database.OutboxWatermark{
+					Watermark:  watermark.Watermark,
+					RetryCount: watermark.RetryCount + 1,
+					StreamID:   watermark.StreamID,
+				},
 				schema.UpdateOutboxWatermarkCalls()[0].Watermark,
 			)
 		}
@@ -222,7 +229,7 @@ func TestProcess(t *testing.T) {
 		conn.AcquireWriteStreamFunc = acquireWriteStream(nil, errors.New("fail"))
 		schema.SelectOutboxWatermarkFunc = selectWatermark(watermark, 0, nil)
 		schema.UpdateOutboxWatermarkFunc = updateWatermark(nil)
-		rd.ReadFunc = readerFunc(events)
+		rd.ReadFunc = readerFunc(stream.Type, watermark.StreamID, events)
 
 		w.WriteFunc = func(ctx context.Context, streamType string, events iter.Seq2[es.Event, error]) error {
 			for range events {
@@ -256,7 +263,7 @@ func TestProcess(t *testing.T) {
 		conn.AcquireWriteStreamFunc = acquireWriteStream(&pgxpool.Conn{}, nil)
 		schema.SelectOutboxWatermarkFunc = selectWatermark(watermark, 0, errors.New("fail"))
 		schema.UpdateOutboxWatermarkFunc = updateWatermark(nil)
-		rd.ReadFunc = readerFunc(events)
+		rd.ReadFunc = readerFunc(stream.Type, watermark.StreamID, events)
 
 		w.WriteFunc = func(ctx context.Context, streamType string, events iter.Seq2[es.Event, error]) error {
 			for range events {
@@ -291,7 +298,7 @@ func TestProcess(t *testing.T) {
 		conn.AcquireWriteStreamFunc = acquireWriteStream(&pgxpool.Conn{}, nil)
 		schema.SelectOutboxWatermarkFunc = selectWatermark(watermark, 10, nil)
 		schema.UpdateOutboxWatermarkFunc = updateWatermark(nil)
-		rd.ReadFunc = readerFunc(events, errors.New("fail"))
+		rd.ReadFunc = readerFunc(stream.Type, watermark.StreamID, events, errors.New("test"))
 
 		w.WriteFunc = func(ctx context.Context, streamType string, events iter.Seq2[es.Event, error]) error {
 			for event, err := range events {
@@ -312,7 +319,11 @@ func TestProcess(t *testing.T) {
 		assert.EqualSlice(t, events, got)
 		if assert.Equal(t, 1, len(schema.UpdateOutboxWatermarkCalls())) {
 			assert.Equal(t,
-				newWatermark(watermark.Watermark, watermark.RetryCount+1),
+				database.OutboxWatermark{
+					Watermark:  watermark.Watermark,
+					RetryCount: watermark.RetryCount + 1,
+					StreamID:   watermark.StreamID,
+				},
 				schema.UpdateOutboxWatermarkCalls()[0].Watermark,
 			)
 		}
@@ -335,7 +346,7 @@ func TestProcess(t *testing.T) {
 		conn.AcquireWriteStreamFunc = acquireWriteStream(&pgxpool.Conn{}, nil)
 		schema.SelectOutboxWatermarkFunc = selectWatermark(watermark, 0, nil)
 		schema.UpdateOutboxWatermarkFunc = updateWatermark(nil)
-		rd.ReadFunc = readerFunc(newEvents(stream, 10))
+		rd.ReadFunc = readerFunc(stream.Type, watermark.StreamID, newEvents(stream, 10))
 
 		w.WriteFunc = func(ctx context.Context, streamType string, events iter.Seq2[es.Event, error]) error {
 			panic("fail")
@@ -368,7 +379,7 @@ func TestProcess(t *testing.T) {
 		conn.AcquireWriteStreamFunc = acquireWriteStream(&pgxpool.Conn{}, nil)
 		schema.SelectOutboxWatermarkFunc = selectWatermark(watermark, 10, nil)
 		schema.UpdateOutboxWatermarkFunc = updateWatermark(nil)
-		rd.ReadFunc = readerFunc(nil)
+		rd.ReadFunc = readerFunc(stream.Type, watermark.StreamID, nil)
 
 		w.WriteFunc = func(ctx context.Context, streamType string, events iter.Seq2[es.Event, error]) error {
 			for range events {
@@ -405,7 +416,7 @@ func TestProcess(t *testing.T) {
 		conn.AcquireWriteStreamFunc = acquireWriteStream(&pgxpool.Conn{}, nil)
 		schema.SelectOutboxWatermarkFunc = selectWatermark(watermark, 5, nil)
 		schema.UpdateOutboxWatermarkFunc = updateWatermark(nil)
-		rd.ReadFunc = readerFunc(events)
+		rd.ReadFunc = readerFunc(stream.Type, watermark.StreamID, events)
 
 		w.WriteFunc = func(ctx context.Context, streamType string, events iter.Seq2[es.Event, error]) error {
 			for event := range events {
@@ -423,7 +434,11 @@ func TestProcess(t *testing.T) {
 		assert.EqualSlice(t, events, got)
 		if assert.Equal(t, 1, len(schema.UpdateOutboxWatermarkCalls())) {
 			assert.Equal(t,
-				newWatermark(10, 0),
+				database.OutboxWatermark{
+					Watermark:  10,
+					RetryCount: 0,
+					StreamID:   watermark.StreamID,
+				},
 				schema.UpdateOutboxWatermarkCalls()[0].Watermark,
 			)
 		}

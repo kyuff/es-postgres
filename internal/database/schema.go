@@ -3,12 +3,15 @@ package database
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/kyuff/es"
+	"github.com/kyuff/es-postgres/internal/uuid"
 )
 
+var once sync.Once
 var sql = sqlQueries{}
 
 type sqlQueries struct {
@@ -23,22 +26,29 @@ type sqlQueries struct {
 	updateOutbox           string
 	selectStreamIDs        string
 	selectOutboxStreamIDs  string
+	selectOutboxWatermark  string
+	updateOutboxWatermark  string
 }
 
 func NewSchema(prefix string) (*Schema, error) {
-	err := renderTemplates(prefix,
-		&sql.selectCurrentMigration,
-		&sql.advisoryLock,
-		&sql.advisoryUnlock,
-		&sql.createMigrationTable,
-		&sql.insertMigrationRow,
-		&sql.selectEvents,
-		&sql.writeEvent,
-		&sql.insertOutbox,
-		&sql.updateOutbox,
-		&sql.selectStreamIDs,
-		&sql.selectOutboxStreamIDs,
-	)
+	var err error
+	once.Do(func() {
+		err = renderTemplates(prefix,
+			&sql.selectCurrentMigration,
+			&sql.advisoryLock,
+			&sql.advisoryUnlock,
+			&sql.createMigrationTable,
+			&sql.insertMigrationRow,
+			&sql.selectEvents,
+			&sql.writeEvent,
+			&sql.insertOutbox,
+			&sql.updateOutbox,
+			&sql.selectStreamIDs,
+			&sql.selectOutboxStreamIDs,
+			&sql.selectOutboxWatermark,
+			&sql.updateOutboxWatermark,
+		)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -156,12 +166,7 @@ ORDER BY event_number ASC
 }
 
 func (s *Schema) SelectEvents(ctx context.Context, db DBTX, streamType string, streamID string, eventNumber int64) (pgx.Rows, error) {
-	rows, err := db.Query(ctx, sql.selectEvents, streamType, streamID, eventNumber)
-	if err != nil {
-		return nil, err
-	}
-
-	return rows, nil
+	return db.Query(ctx, sql.selectEvents, streamType, streamID, eventNumber)
 }
 
 func init() {
@@ -208,7 +213,14 @@ INSERT INTO {{ .Prefix }}_outbox (
 }
 
 func (s *Schema) InsertOutbox(ctx context.Context, tx DBTX, streamType, streamID, storeStreamID string, eventNumber, watermark int64, partition uint32) (int64, error) {
-	affected, err := tx.Exec(ctx, sql.insertOutbox, streamType, streamID, storeStreamID, eventNumber, watermark, partition)
+	affected, err := tx.Exec(ctx, sql.insertOutbox,
+		streamType,
+		streamID,
+		storeStreamID,
+		eventNumber,
+		watermark,
+		partition,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -246,6 +258,9 @@ LIMIT $3;`
 }
 
 func (s *Schema) SelectStreamIDs(ctx context.Context, db DBTX, streamType string, token string, limit int64) ([]string, string, error) {
+	if token == "" {
+		token = uuid.Empty
+	}
 	rows, err := db.Query(ctx, sql.selectStreamIDs, token, streamType, limit)
 	if err != nil {
 		return nil, "", err
@@ -281,16 +296,18 @@ WHERE
  AND store_stream_id > $2
  AND process_at <= $3
 ORDER BY store_stream_id
-LIMIT $4
-    
+LIMIT $4    
 `
 }
 
 func (s *Schema) SelectOutboxStreamIDs(ctx context.Context, db DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]Stream, error) {
+	if token == "" {
+		token = uuid.Empty
+	}
 	rows, err := db.Query(ctx, sql.selectOutboxStreamIDs,
 		partitions,
-		time.Now().Add(-graceWindow),
 		token,
+		time.Now().Add(-graceWindow),
 		limit,
 	)
 	if err != nil {
@@ -311,10 +328,55 @@ func (s *Schema) SelectOutboxStreamIDs(ctx context.Context, db DBTX, graceWindow
 	return result, nil
 }
 
+func init() {
+	sql.selectOutboxWatermark = `
+SELECT 
+    stream_id,
+	event_number,
+	watermark,
+	retry_count
+FROM {{ .Prefix }}_outbox
+WHERE
+    stream_type = $1
+AND store_stream_id = $2;
+`
+}
 func (s *Schema) SelectOutboxWatermark(ctx context.Context, db DBTX, stream Stream) (OutboxWatermark, int64, error) {
-	return OutboxWatermark{}, 0, nil
+	var (
+		row         = db.QueryRow(ctx, sql.selectOutboxWatermark, stream.Type, stream.StoreID)
+		w           OutboxWatermark
+		eventNumber int64
+	)
+
+	err := row.Scan(&w.StreamID, &eventNumber, &w.Watermark, &w.RetryCount)
+	return w, eventNumber, err
 }
 
+func init() {
+	sql.updateOutboxWatermark = `
+UPDATE {{ .Prefix }}_outbox
+SET 
+	watermark = $4,
+    retry_count = $5,
+    process_at = $3
+WHERE stream_type = $1
+  AND store_stream_id = $2
+`
+}
 func (s *Schema) UpdateOutboxWatermark(ctx context.Context, db DBTX, stream Stream, delay time.Duration, watermark OutboxWatermark) error {
-	return nil
+	tag, err := db.Exec(ctx, sql.updateOutboxWatermark,
+		stream.Type,
+		stream.StoreID,
+		time.Now().Add(delay),
+		watermark.Watermark,
+		watermark.RetryCount,
+	)
+	if err != nil {
+		return err
+	}
+
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("stream %q not watermark updated", stream.Type)
+	}
+	return err
 }

@@ -15,15 +15,16 @@ import (
 )
 
 type Config struct {
-	logger            Logger
-	startCtx          func() context.Context
-	tablePrefix       string
-	codec             codec
-	partitioner       func(streamType, streamID string) uint32
-	reconcileInterval time.Duration
-	reconcileTimeout  time.Duration
-	processTimeout    time.Duration
-	processBackoff    func(streamType string, retryCount int64) time.Duration
+	logger              Logger
+	startCtx            func() context.Context
+	tablePrefix         string
+	codec               codec
+	partitioner         func(streamType, streamID string) uint32
+	reconcilePublishing bool
+	reconcileInterval   time.Duration
+	reconcileTimeout    time.Duration
+	processTimeout      time.Duration
+	processBackoff      func(streamType string, retryCount int64) time.Duration
 }
 
 func defaultOptions() *Config {
@@ -38,6 +39,7 @@ func defaultOptions() *Config {
 		WithReconcileTimeout(time.Second*5),
 		WithProcessTimeout(time.Second*3),
 		WithLinearProcessBackoff(time.Second),
+		WithReconcilePublishing(true),
 	)
 
 }
@@ -200,4 +202,11 @@ func WithExponentialProcessBackoff(base time.Duration) Option {
 	return WithProcessBackoff(func(_ string, retries int64) time.Duration {
 		return backoff.Exponential(base, retries)
 	})
+}
+
+// WithReconcilePublishing enables publishing by a periodic reconciler.
+func WithReconcilePublishing(enabled bool) Option {
+	return func(cfg *Config) {
+		cfg.reconcilePublishing = enabled
+	}
 }

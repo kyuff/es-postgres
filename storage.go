@@ -58,22 +58,20 @@ func New(connector Connector, opts ...Option) (*Storage, error) {
 		connector: connector,
 		schema:    schema,
 		reader:    reader,
-		reconciles: []reconcile{
-			reconcilers.NewPeriodic(
-				cfg.logger,
-				connector,
-				schema,
-				valuer,
-				cfg.reconcileInterval,
-				cfg.reconcileTimeout,
-				cfg.processTimeout,
+		reconciles: []reconcilers.Reconciler{
+			reconcilers.FeatureFlag(cfg.reconcilePublishing,
+				reconcilers.NewPeriodic(
+					cfg.logger,
+					connector,
+					schema,
+					valuer,
+					cfg.reconcileInterval,
+					cfg.reconcileTimeout,
+					cfg.processTimeout,
+				),
 			),
 		},
 	}, nil
-}
-
-type reconcile interface {
-	Reconcile(ctx context.Context, p reconcilers.Processor) error
 }
 
 type Storage struct {
@@ -81,7 +79,7 @@ type Storage struct {
 	connector  Connector
 	schema     *database.Schema
 	reader     reader
-	reconciles []reconcile
+	reconciles []reconcilers.Reconciler
 }
 
 func (s *Storage) Read(ctx context.Context, streamType string, streamID string, eventNumber int64) iter.Seq2[es.Event, error] {

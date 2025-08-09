@@ -15,7 +15,7 @@ func Test_schemaName(t *testing.T) {
 
 	// act
 	for range 5 {
-		schemas = append(schemas, schemaName(t.Name()))
+		schemas = append(schemas, nameSchema(t.Name()))
 		time.Sleep(time.Millisecond * 100)
 	}
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"iter"
 	"math/rand"
+	"sync"
 	"testing"
 	"time"
 
@@ -99,6 +100,7 @@ func TestStorage(t *testing.T) {
 		}
 	)
 	t.Run("Instance", func(t *testing.T) {
+		t.Parallel()
 		t.Run("should create a new storage from dsn", func(t *testing.T) {
 			// arrange
 			var (
@@ -135,6 +137,7 @@ func TestStorage(t *testing.T) {
 	})
 
 	t.Run("Register", func(t *testing.T) {
+		t.Parallel()
 		t.Run("should register event types", func(t *testing.T) {
 			// arrange
 			var (
@@ -151,6 +154,7 @@ func TestStorage(t *testing.T) {
 	})
 
 	t.Run("Read/Write", func(t *testing.T) {
+		t.Parallel()
 		t.Run("should read no events", func(t *testing.T) {
 			// arrange
 			var (
@@ -235,6 +239,7 @@ func TestStorage(t *testing.T) {
 	})
 
 	t.Run("GetStreamIDs", func(t *testing.T) {
+		t.Parallel()
 		t.Run("should read a list of stream ids", func(t *testing.T) {
 			// arrange
 			var (
@@ -354,47 +359,113 @@ func TestStorage(t *testing.T) {
 	})
 
 	t.Run("StartPublish", func(t *testing.T) {
-		t.Skipf("not yet implemented")
-		// arrange
-		var (
-			storage = newInstance(t, postgres.WithReconcileInterval(time.Millisecond*100))
-			w       = &WriterMock{}
+		t.Parallel()
+		t.Run("write all events", func(t *testing.T) {
+			// arrange
+			var (
+				storage = newInstance(t, postgres.WithReconcileInterval(time.Millisecond*100))
+				w       = &WriterMock{}
 
-			streamType = newStreamType()
-			streamID   = newStreamID()
-			events     = newEvents(streamType, streamID, 10)
-		)
+				streamType = newStreamType()
+				streamID   = newStreamID()
+				events     = newEvents(streamType, streamID, 10)
+				got        []es.Event
+				mu         sync.RWMutex
+			)
 
-		w.WriteFunc = func(ctx context.Context, streamType string, events iter.Seq2[es.Event, error]) error {
-			return nil
-		}
-
-		assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
-
-		go func() {
-			assert.NoError(t, storage.StartPublish(t.Context(), w))
-		}()
-
-		// act
-		err := storage.Write(t.Context(), streamType, seqs.Seq2(events...))
-
-		// assert
-		assert.NoError(t, err)
-		assert.NoErrorEventually(t, time.Second*5, func() error {
-			if len(w.WriteCalls()) == 0 {
-				return errors.New("no events received")
+			w.WriteFunc = func(ctx context.Context, typ string, eventSeq iter.Seq2[es.Event, error]) error {
+				mu.Lock()
+				defer mu.Unlock()
+				assert.Equalf(t, streamType, typ, "stream type mismatch")
+				for event, err := range eventSeq {
+					if assert.NoError(t, err) {
+						got = append(got, event)
+					}
+				}
+				return nil
 			}
 
-			if !assert.Equal(t, streamType, w.WriteCalls()[0].StreamType) {
-				return errors.New("wrong stream type")
-			}
+			assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
 
-			if !assert.EqualSeq2(t, seqs.Seq2(events...), w.WriteCalls()[0].Events, eventsEqual(t)) {
-				return errors.New("wrong events")
-			}
+			go func() {
+				assert.NoError(t, storage.StartPublish(t.Context(), w))
+			}()
 
-			return nil
+			// act
+			err := storage.Write(t.Context(), streamType, seqs.Seq2(events...))
+
+			// assert
+			assert.NoError(t, err)
+			assert.NoErrorEventually(t, time.Second*5, func() error {
+				mu.RLock()
+				defer mu.RUnlock()
+
+				if len(got) < 10 {
+					return errors.New("no events received")
+				}
+				return nil
+			})
+			assert.EqualSlice(t, events, got)
+			assert.Equal(t, 1, len(w.WriteCalls()))
 		})
 
+		t.Run("repeat write on error", func(t *testing.T) {
+			// arrange
+			var (
+				storage = newInstance(t,
+					postgres.WithReconcileInterval(time.Millisecond*50),
+					postgres.WithDefaultSlog(),
+				)
+				w = &WriterMock{}
+
+				streamType = newStreamType()
+				streamID   = newStreamID()
+				events     = newEvents(streamType, streamID, 10)
+				got        []es.Event
+				writes     = 0
+				mu         sync.RWMutex
+			)
+
+			w.WriteFunc = func(ctx context.Context, typ string, eventSeq iter.Seq2[es.Event, error]) error {
+				mu.Lock()
+				defer mu.Unlock()
+
+				writes++
+				if writes < 3 {
+					return errors.New("test write error")
+				}
+
+				assert.Equalf(t, streamType, typ, "stream type mismatch")
+				for event, err := range eventSeq {
+					if assert.NoError(t, err) {
+						got = append(got, event)
+					}
+				}
+				return nil
+			}
+
+			assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
+
+			go func() {
+				assert.NoError(t, storage.StartPublish(t.Context(), w))
+			}()
+
+			// act
+			err := storage.Write(t.Context(), streamType, seqs.Seq2(events...))
+
+			// assert
+			assert.NoError(t, err)
+			assert.NoErrorEventually(t, time.Second*2, func() error {
+				mu.RLock()
+				defer mu.RUnlock()
+
+				if len(got) < 10 {
+					return errors.New("no events received")
+				}
+				return nil
+			})
+			assert.EqualSlice(t, events, got)
+			assert.Equal(t, 3, len(w.WriteCalls()))
+		})
 	})
 }
