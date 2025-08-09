@@ -1,4 +1,4 @@
-package postgres
+package eventsio_test
 
 import (
 	"errors"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/kyuff/es"
 	"github.com/kyuff/es-postgres/internal/assert"
+	"github.com/kyuff/es-postgres/internal/eventsio"
 	"github.com/kyuff/es-postgres/internal/seqs"
 	"github.com/kyuff/es-postgres/internal/uuid"
 )
@@ -20,7 +21,7 @@ func (e MockEvent) EventName() string {
 	return "MockEvent"
 }
 
-func TestValidateStreamWrite(t *testing.T) {
+func TestValidateWrite(t *testing.T) {
 	var (
 		newStreamType    = uuid.V7
 		newStreamID      = uuid.V7
@@ -90,10 +91,11 @@ func TestValidateStreamWrite(t *testing.T) {
 				seqs.Error2[es.Event](errors.New("TEST")),
 				seqs.Seq2(newEvents(streamType, streamID, storeStreamID, 3)...),
 			)
+			sut = eventsio.NewValidator()
 		)
 
 		// act
-		got := validateStreamWrite(streamType, events)
+		got := sut.Validate(streamType, events)
 
 		// assert
 		assertHasError(t, got)
@@ -110,10 +112,11 @@ func TestValidateStreamWrite(t *testing.T) {
 				seqs.Seq2(newEvents(streamTypeA, streamID, storeStreamID, 3)...),
 				seqs.Seq2(newEvents(streamTypeB, streamID, storeStreamID, 3)...),
 			)
+			sut = eventsio.NewValidator()
 		)
 
 		// act
-		got := validateStreamWrite(streamTypeA, events)
+		got := sut.Validate(streamTypeA, events)
 
 		// assert
 		assertHasError(t, got)
@@ -130,10 +133,11 @@ func TestValidateStreamWrite(t *testing.T) {
 				seqs.Seq2(newEvents(streamType, streamIDA, storeStreamID, 3)...),
 				seqs.Seq2(newEvents(streamType, streamIDB, storeStreamID, 3)...),
 			)
+			sut = eventsio.NewValidator()
 		)
 
 		// act
-		got := validateStreamWrite(streamType, events)
+		got := sut.Validate(streamType, events)
 
 		// assert
 		assertHasError(t, got)
@@ -150,10 +154,11 @@ func TestValidateStreamWrite(t *testing.T) {
 				seqs.Seq2(newEvents(streamType, streamID, storeStreamIDA, 3)...),
 				seqs.Seq2(newEvents(streamType, streamID, storeStreamIDB, 3)...),
 			)
+			sut = eventsio.NewValidator()
 		)
 
 		// act
-		got := validateStreamWrite(streamType, events)
+		got := sut.Validate(streamType, events)
 
 		// assert
 		assertHasError(t, got)
@@ -166,10 +171,11 @@ func TestValidateStreamWrite(t *testing.T) {
 			streamID      = newStreamID()
 			storeStreamID = newStoreStreamID()
 			events        = newEvents(streamType, streamID, storeStreamID, 3)
+			sut           = eventsio.NewValidator()
 		)
 
 		// act
-		got := validateStreamWrite(streamType, seqs.Concat2(
+		got := sut.Validate(streamType, seqs.Concat2(
 			seqs.Seq2(events...),
 			seqs.Seq2(events[2:]...),
 		))
@@ -185,10 +191,11 @@ func TestValidateStreamWrite(t *testing.T) {
 			streamID      = newStreamID()
 			storeStreamID = newStoreStreamID()
 			events        = newEvents(streamType, streamID, storeStreamID, 10)
+			sut           = eventsio.NewValidator()
 		)
 
 		// act
-		got := validateStreamWrite(streamType, seqs.Concat2(
+		got := sut.Validate(streamType, seqs.Concat2(
 			seqs.Seq2(events[0:2]...),
 			seqs.Seq2(events[5:]...),
 		))
@@ -204,10 +211,11 @@ func TestValidateStreamWrite(t *testing.T) {
 			streamID      = newStreamID()
 			storeStreamID = newStoreStreamID()
 			events        = newEvents(streamType, streamID, storeStreamID, 10)
+			sut           = eventsio.NewValidator()
 		)
 
 		// act
-		got := validateStreamWrite(streamType, seqs.Seq2(events...))
+		got := sut.Validate(streamType, seqs.Seq2(events...))
 
 		// assert
 		assert.EqualSeq2(t, seqs.Seq2(events...), got, eventsEqual(t))

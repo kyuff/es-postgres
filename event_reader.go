@@ -10,10 +10,6 @@ import (
 	"github.com/kyuff/es-postgres/internal/database"
 )
 
-type reader interface {
-	Read(ctx context.Context, streamType, streamID string, eventNumber int64) iter.Seq2[es.Event, error]
-}
-
 func newEventReader(onnector Connector, schema *database.Schema, codec codec) *eventReader {
 	return &eventReader{
 		connector: onnector,

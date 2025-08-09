@@ -10,11 +10,20 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kyuff/es"
 	"github.com/kyuff/es-postgres/internal/database"
+	"github.com/kyuff/es-postgres/internal/eventsio"
 	"github.com/kyuff/es-postgres/internal/processor"
 	"github.com/kyuff/es-postgres/internal/reconcilers"
 	"github.com/kyuff/es-postgres/internal/uuid"
 	"golang.org/x/sync/errgroup"
 )
+
+type reader interface {
+	Read(ctx context.Context, streamType, streamID string, eventNumber int64) iter.Seq2[es.Event, error]
+}
+
+type writer interface {
+	Write(ctx context.Context, db database.DBTX, streamType string, events iter.Seq2[es.Event, error]) error
+}
 
 func New(connector Connector, opts ...Option) (*Storage, error) {
 	cfg := applyOptions(defaultOptions(), opts...)
@@ -57,7 +66,7 @@ func New(connector Connector, opts ...Option) (*Storage, error) {
 		connector: connector,
 		schema:    schema,
 		reader:    newEventReader(connector, schema, cfg.codec),
-		writer:    newEventWriter(schema, cfg.partitioner),
+		writer:    eventsio.NewWriter(schema, eventsio.NewValidator(), cfg.partitioner),
 		reconciles: []reconcilers.Reconciler{
 			reconcilers.FeatureFlag(cfg.reconcilePublishing,
 				reconcilers.NewPeriodic(

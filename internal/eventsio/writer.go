@@ -1,4 +1,4 @@
-package postgres
+package eventsio
 
 import (
 	"context"
@@ -9,30 +9,46 @@ import (
 	"github.com/kyuff/es-postgres/internal/database"
 )
 
-type writer interface {
-	Write(ctx context.Context, tx database.DBTX, streamType string, events iter.Seq2[es.Event, error]) error
+type Schema interface {
+	WriteEvent(ctx context.Context, db database.DBTX, event es.Event) error
+	InsertOutbox(ctx context.Context, tx database.DBTX, streamType, streamID, storeStreamID string, eventNumber, watermark int64, partition uint32) (int64, error)
+	UpdateOutbox(ctx context.Context, tx database.DBTX, streamType, streamID string, eventNumber, lastEventNumber int64) (int64, error)
 }
 
-func newEventWriter(schema *database.Schema, partitioner func(streamType, streamID string) uint32) *eventWriter {
-	return &eventWriter{
-		schema:      schema,
+type Validator interface {
+	Validate(streamType string, events iter.Seq2[es.Event, error]) iter.Seq2[es.Event, error]
+}
+
+type ValidatorFunc func(streamType string, events iter.Seq2[es.Event, error]) iter.Seq2[es.Event, error]
+
+func (fn ValidatorFunc) Validate(streamType string, events iter.Seq2[es.Event, error]) iter.Seq2[es.Event, error] {
+	return fn(streamType, events)
+}
+
+func NewWriter(schema Schema, validator Validator, partitioner func(streamType, streamID string) uint32) *Writer {
+	return &Writer{
+		schema:    schema,
+		validator: validator,
+
 		partitioner: partitioner,
 	}
 }
 
-type eventWriter struct {
-	schema      *database.Schema
+type Writer struct {
+	schema    Schema
+	validator Validator
+
 	partitioner func(streamType, streamID string) uint32
 }
 
-func (w *eventWriter) Write(ctx context.Context, db database.DBTX, streamType string, events iter.Seq2[es.Event, error]) error {
+func (w *Writer) Write(ctx context.Context, db database.DBTX, streamType string, events iter.Seq2[es.Event, error]) error {
 	var (
 		firstEvent es.Event
 		lastEvent  es.Event
 		eventCount = 0
 	)
 
-	for event, err := range validateStreamWrite(streamType, events) {
+	for event, err := range w.validator.Validate(streamType, events) {
 		if err != nil {
 			return fmt.Errorf("[es/postgres] Range over events to be written failed: %w", err)
 		}
