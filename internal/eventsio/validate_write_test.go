@@ -2,16 +2,14 @@ package eventsio_test
 
 import (
 	"errors"
-	"fmt"
 	"iter"
 	"testing"
-	"time"
 
 	"github.com/kyuff/es"
 	"github.com/kyuff/es-postgres/internal/assert"
 	"github.com/kyuff/es-postgres/internal/eventsio"
 	"github.com/kyuff/es-postgres/internal/seqs"
-	"github.com/kyuff/es-postgres/internal/uuid"
+	"github.com/kyuff/es-postgres/internal/testdata"
 )
 
 type MockEvent struct {
@@ -23,38 +21,6 @@ func (e MockEvent) EventName() string {
 
 func TestValidateWrite(t *testing.T) {
 	var (
-		newStreamType    = uuid.V7
-		newStreamID      = uuid.V7
-		newStoreStreamID = uuid.V7
-		newEvent         = func(eventNumber int64, mods ...func(e *es.Event)) es.Event {
-			e := es.Event{
-				StreamID:     fmt.Sprintf("StreamID-%d", eventNumber),
-				StreamType:   fmt.Sprintf("StreamType-%d", eventNumber),
-				EventNumber:  eventNumber,
-				StoreEventID: uuid.V7(),
-				EventTime:    time.Now().Add(time.Second * time.Duration(eventNumber)).Truncate(time.Second),
-			}
-			for _, mod := range mods {
-				mod(&e)
-			}
-
-			return e
-		}
-		newEvents = func(streamType, streamID string, storeStreamID string, count int) []es.Event {
-			var events []es.Event
-			var storeEventIDs = uuid.V7At(time.Now(), count)
-			for i := 1; i <= count; i++ {
-				events = append(events, newEvent(int64(i), func(e *es.Event) {
-					e.StreamType = streamType
-					e.StreamID = streamID
-					e.StoreEventID = storeEventIDs[i-1]
-					e.StoreStreamID = storeStreamID
-					e.Content = MockEvent{}
-				}))
-			}
-
-			return events
-		}
 		eventsEqual = func(t *testing.T) func(expected, got assert.KeyValue[es.Event, error]) bool {
 			return func(expected, got assert.KeyValue[es.Event, error]) bool {
 				return assert.Equal(t, expected.Key.StreamID, got.Key.StreamID) &&
@@ -77,19 +43,16 @@ func TestValidateWrite(t *testing.T) {
 			return false
 		}
 	)
-	_ = eventsEqual
-	_ = newEvents
-	_ = newEvent
 
 	t.Run("fail on error", func(t *testing.T) {
 		// arrange
 		var (
-			streamType    = newStreamType()
-			streamID      = newStreamID()
-			storeStreamID = newStoreStreamID()
-			events        = seqs.Concat2(
+			streamType = testdata.StreamType()
+			events     = seqs.Concat2(
 				seqs.Error2[es.Event](errors.New("TEST")),
-				seqs.Seq2(newEvents(streamType, streamID, storeStreamID, 3)...),
+				seqs.Seq2(testdata.Events(3, func(e *es.Event) {
+					e.StreamType = streamType
+				})...),
 			)
 			sut = eventsio.NewValidator()
 		)
@@ -104,13 +67,15 @@ func TestValidateWrite(t *testing.T) {
 	t.Run("fail on stream type mismatch", func(t *testing.T) {
 		// arrange
 		var (
-			streamTypeA   = newStreamType()
-			streamTypeB   = newStreamType()
-			streamID      = newStreamID()
-			storeStreamID = newStoreStreamID()
-			events        = seqs.Concat2(
-				seqs.Seq2(newEvents(streamTypeA, streamID, storeStreamID, 3)...),
-				seqs.Seq2(newEvents(streamTypeB, streamID, storeStreamID, 3)...),
+			streamTypeA = testdata.StreamType()
+			streamTypeB = testdata.StreamType()
+			events      = seqs.Concat2(
+				seqs.Seq2(testdata.Events(3, func(e *es.Event) {
+					e.StreamType = streamTypeA
+				})...),
+				seqs.Seq2(testdata.Events(3, func(e *es.Event) {
+					e.StreamType = streamTypeB
+				})...),
 			)
 			sut = eventsio.NewValidator()
 		)
@@ -125,13 +90,18 @@ func TestValidateWrite(t *testing.T) {
 	t.Run("fail on stream id mismatch", func(t *testing.T) {
 		// arrange
 		var (
-			streamType    = newStreamType()
-			streamIDA     = newStreamID()
-			streamIDB     = newStreamID()
-			storeStreamID = newStoreStreamID()
-			events        = seqs.Concat2(
-				seqs.Seq2(newEvents(streamType, streamIDA, storeStreamID, 3)...),
-				seqs.Seq2(newEvents(streamType, streamIDB, storeStreamID, 3)...),
+			streamType = testdata.StreamType()
+			streamIDA  = testdata.StreamID()
+			streamIDB  = testdata.StreamID()
+			events     = seqs.Concat2(
+				seqs.Seq2(testdata.Events(3, func(e *es.Event) {
+					e.StreamType = streamType
+					e.StreamID = streamIDA
+				})...),
+				seqs.Seq2(testdata.Events(3, func(e *es.Event) {
+					e.StreamType = streamType
+					e.StreamID = streamIDB
+				})...),
 			)
 			sut = eventsio.NewValidator()
 		)
@@ -146,13 +116,21 @@ func TestValidateWrite(t *testing.T) {
 	t.Run("fail on store stream id mismatch", func(t *testing.T) {
 		// arrange
 		var (
-			streamType     = newStreamType()
-			streamID       = newStreamID()
-			storeStreamIDA = newStoreStreamID()
-			storeStreamIDB = newStoreStreamID()
+			streamType     = testdata.StreamType()
+			streamID       = testdata.StreamID()
+			storeStreamIDA = testdata.StoreStreamID()
+			storeStreamIDB = testdata.StoreStreamID()
 			events         = seqs.Concat2(
-				seqs.Seq2(newEvents(streamType, streamID, storeStreamIDA, 3)...),
-				seqs.Seq2(newEvents(streamType, streamID, storeStreamIDB, 3)...),
+				seqs.Seq2(testdata.Events(3, func(e *es.Event) {
+					e.StreamType = streamType
+					e.StreamID = streamID
+					e.StoreStreamID = storeStreamIDA
+				})...),
+				seqs.Seq2(testdata.Events(3, func(e *es.Event) {
+					e.StreamType = streamType
+					e.StreamID = streamID
+					e.StoreStreamID = storeStreamIDB
+				})...),
 			)
 			sut = eventsio.NewValidator()
 		)
@@ -167,11 +145,11 @@ func TestValidateWrite(t *testing.T) {
 	t.Run("fail on double event number", func(t *testing.T) {
 		// arrange
 		var (
-			streamType    = newStreamType()
-			streamID      = newStreamID()
-			storeStreamID = newStoreStreamID()
-			events        = newEvents(streamType, streamID, storeStreamID, 3)
-			sut           = eventsio.NewValidator()
+			streamType = testdata.StreamType()
+			events     = testdata.Events(3, func(e *es.Event) {
+				e.StreamType = streamType
+			})
+			sut = eventsio.NewValidator()
 		)
 
 		// act
@@ -187,11 +165,11 @@ func TestValidateWrite(t *testing.T) {
 	t.Run("fail on missing event number", func(t *testing.T) {
 		// arrange
 		var (
-			streamType    = newStreamType()
-			streamID      = newStreamID()
-			storeStreamID = newStoreStreamID()
-			events        = newEvents(streamType, streamID, storeStreamID, 10)
-			sut           = eventsio.NewValidator()
+			streamType = testdata.StreamType()
+			events     = testdata.Events(10, func(e *es.Event) {
+				e.StreamType = streamType
+			})
+			sut = eventsio.NewValidator()
 		)
 
 		// act
@@ -207,11 +185,11 @@ func TestValidateWrite(t *testing.T) {
 	t.Run("validate full sequence", func(t *testing.T) {
 		// arrange
 		var (
-			streamType    = newStreamType()
-			streamID      = newStreamID()
-			storeStreamID = newStoreStreamID()
-			events        = newEvents(streamType, streamID, storeStreamID, 10)
-			sut           = eventsio.NewValidator()
+			streamType = testdata.StreamType()
+			events     = testdata.Events(10, func(e *es.Event) {
+				e.StreamType = streamType
+			})
+			sut = eventsio.NewValidator()
 		)
 
 		// act
