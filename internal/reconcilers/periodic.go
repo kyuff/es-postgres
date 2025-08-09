@@ -50,7 +50,7 @@ func (h *Periodic) Reconcile(ctx context.Context, p Processor) error {
 			err := h.reconcile(ctx, p)
 			if err != nil {
 				errorCount++
-				h.logger.ErrorfCtx(ctx, "[es/postgres] Failed to check the outbox: %s", err)
+				h.logger.ErrorfCtx(ctx, "[es/postgres] Failed to reconcile the outbox: %s", err)
 			} else {
 				errorCount = 0
 			}

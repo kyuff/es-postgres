@@ -326,6 +326,7 @@ func (s *Schema) SelectOutboxStreamIDs(ctx context.Context, db DBTX, graceWindow
 func init() {
 	sql.selectOutboxWatermark = `
 SELECT 
+    stream_id,
 	event_number,
 	watermark,
 	retry_count
@@ -342,7 +343,7 @@ func (s *Schema) SelectOutboxWatermark(ctx context.Context, db DBTX, stream Stre
 		eventNumber int64
 	)
 
-	err := row.Scan(&eventNumber, &w.Watermark, &w.RetryCount)
+	err := row.Scan(&w.StreamID, &eventNumber, &w.Watermark, &w.RetryCount)
 	return w, eventNumber, err
 }
 

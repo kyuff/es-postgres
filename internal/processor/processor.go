@@ -67,7 +67,7 @@ func (p *Processor) Process(ctx context.Context, stream database.Stream) (err er
 				delay      time.Duration
 			)
 
-			for event, err := range p.rd.Read(ctx, stream.Type, stream.StoreID, watermark) {
+			for event, err := range p.rd.Read(ctx, stream.Type, work.StreamID, watermark) {
 				if err != nil {
 					yield(event, err)
 					break
@@ -90,6 +90,7 @@ func (p *Processor) Process(ctx context.Context, stream database.Stream) (err er
 			err = p.schema.UpdateOutboxWatermark(ctx, db, stream, delay, database.OutboxWatermark{
 				Watermark:  watermark,
 				RetryCount: retryCount,
+				StreamID:   work.StreamID,
 			})
 		})
 	})

@@ -658,6 +658,7 @@ func TestSchema(t *testing.T) {
 			assert.Equalf(t, int64(1), watermark.Watermark, "Watermark")
 			assert.Equalf(t, int64(20), watermark.RetryCount, "RetryCount")
 			assert.Equalf(t, int64(300), eventNumber, "eventNumber")
+			assert.Equalf(t, streamID, watermark.StreamID, "StreamID")
 		})
 
 		t.Run("fail with no stream", func(t *testing.T) {
