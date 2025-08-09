@@ -1,6 +1,7 @@
 package testdata
 
 import (
+	"math/rand/v2"
 	"time"
 
 	"github.com/kyuff/es"
@@ -8,7 +9,7 @@ import (
 )
 
 type MockEvent struct {
-	ID int
+	ID int `json:"id"`
 }
 
 func (e MockEvent) EventName() string {
@@ -35,7 +36,7 @@ func Event(eventNumber int64, mods ...func(e *es.Event)) es.Event {
 		StreamType:    StreamType(),
 		EventNumber:   eventNumber,
 		EventTime:     time.Now().Add(time.Second * time.Duration(eventNumber)).Truncate(time.Second),
-		Content:       MockEvent{},
+		Content:       MockEvent{ID: rand.IntN(1000)},
 		StoreEventID:  StoreEventID(),
 		StoreStreamID: StoreStreamID(),
 	}
@@ -46,9 +47,22 @@ func Event(eventNumber int64, mods ...func(e *es.Event)) es.Event {
 	return e
 }
 func Events(count int, mods ...func(e *es.Event)) []es.Event {
+	var (
+		streamType    = StreamType()
+		streamID      = StreamID()
+		storeStreamID = StoreStreamID()
+	)
 	var events []es.Event
+	var modifications []func(e *es.Event)
+	modifications = append(modifications, func(e *es.Event) {
+		e.StreamType = streamType
+		e.StreamID = streamID
+		e.StoreStreamID = storeStreamID
+	})
+	modifications = append(modifications, mods...)
 	for i := 1; i <= count; i++ {
-		events = append(events, Event(int64(i), mods...))
+
+		events = append(events, Event(int64(i), modifications...))
 	}
 
 	return events
