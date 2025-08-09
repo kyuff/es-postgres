@@ -11,7 +11,7 @@ import (
 )
 
 type Schema interface {
-	WriteEvent(ctx context.Context, db database.DBTX, event es.Event) error
+	WriteEvent(ctx context.Context, db database.DBTX, event es.Event, content, metadata []byte) error
 	InsertOutbox(ctx context.Context, tx database.DBTX, streamType, streamID, storeStreamID string, eventNumber, watermark int64, partition uint32) (int64, error)
 	UpdateOutbox(ctx context.Context, tx database.DBTX, streamType, streamID string, eventNumber, lastEventNumber int64) (int64, error)
 	SelectEvents(ctx context.Context, db database.DBTX, streamType string, streamID string, eventNumber int64) (pgx.Rows, error)

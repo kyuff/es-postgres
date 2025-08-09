@@ -66,7 +66,7 @@ func New(connector Connector, opts ...Option) (*Storage, error) {
 		connector: connector,
 		schema:    schema,
 		reader:    eventsio.NewReader(connector, schema, cfg.codec),
-		writer:    eventsio.NewWriter(schema, eventsio.NewValidator(), cfg.partitioner),
+		writer:    eventsio.NewWriter(schema, eventsio.NewValidator(), cfg.codec, cfg.partitioner),
 		reconciles: []reconcilers.Reconciler{
 			reconcilers.FeatureFlag(cfg.reconcilePublishing,
 				reconcilers.NewPeriodic(

@@ -9,10 +9,11 @@ import (
 	"github.com/kyuff/es-postgres/internal/database"
 )
 
-func NewWriter(schema Schema, validator Validator, partitioner func(streamType, streamID string) uint32) *Writer {
+func NewWriter(schema Schema, validator Validator, codec Codec, partitioner func(streamType, streamID string) uint32) *Writer {
 	return &Writer{
 		schema:    schema,
 		validator: validator,
+		codec:     codec,
 
 		partitioner: partitioner,
 	}
@@ -21,6 +22,7 @@ func NewWriter(schema Schema, validator Validator, partitioner func(streamType, 
 type Writer struct {
 	schema    Schema
 	validator Validator
+	codec     Codec
 
 	partitioner func(streamType, streamID string) uint32
 }
@@ -41,7 +43,14 @@ func (w *Writer) Write(ctx context.Context, db database.DBTX, streamType string,
 			firstEvent = event
 		}
 
-		err = w.schema.WriteEvent(ctx, db, event)
+		content, err := w.codec.Encode(event)
+		if err != nil {
+			return fmt.Errorf("[es/postgres] Failed to encode event: %w", err)
+		}
+
+		var metadata []byte // TODO
+
+		err = w.schema.WriteEvent(ctx, db, event, content, metadata)
 		if err != nil {
 			return fmt.Errorf("[es/postgres] Failed to write event: %w", err)
 		}

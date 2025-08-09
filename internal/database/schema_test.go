@@ -93,7 +93,11 @@ func TestSchema(t *testing.T) {
 		}
 		writeEvents = func(t *testing.T, db database.DBTX, schema *database.Schema, events []es.Event) {
 			for _, event := range events {
-				assert.NoError(t, schema.WriteEvent(t.Context(), db, event))
+				b, err := json.Marshal(event.Content)
+				if !assert.NoError(t, err) {
+					t.Fatal(err)
+				}
+				assert.NoError(t, schema.WriteEvent(t.Context(), db, event, b, []byte("{}")))
 			}
 		}
 		assertEqualEventsInRow = func(t *testing.T, expected []es.Event, rows pgx.Rows) {
@@ -164,10 +168,12 @@ func TestSchema(t *testing.T) {
 				streamType   = newStreamType()
 				streamID     = newStreamID()
 				events       = newEvents(streamType, streamID, 1)
+				content      = []byte(`{}`)
+				metadata     = []byte(`{}`)
 			)
 
 			// act
-			err := schema.WriteEvent(t.Context(), conn, events[0])
+			err := schema.WriteEvent(t.Context(), conn, events[0], content, metadata)
 
 			// assert
 			assert.NoError(t, err)
@@ -180,12 +186,14 @@ func TestSchema(t *testing.T) {
 				streamType   = newStreamType()
 				streamID     = newStreamID()
 				events       = newEvents(streamType, streamID, 1)
+				content      = []byte(`{}`)
+				metadata     = []byte(`{}`)
 			)
 
-			assert.NoError(t, schema.WriteEvent(t.Context(), conn, events[0]))
+			assert.NoError(t, schema.WriteEvent(t.Context(), conn, events[0], content, metadata))
 
 			// act
-			err := schema.WriteEvent(t.Context(), conn, events[0])
+			err := schema.WriteEvent(t.Context(), conn, events[0], content, metadata)
 
 			// assert
 			assert.Error(t, err)

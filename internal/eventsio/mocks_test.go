@@ -32,7 +32,7 @@ var _ eventsio.Schema = &SchemaMock{}
 //			UpdateOutboxFunc: func(ctx context.Context, tx database.DBTX, streamType string, streamID string, eventNumber int64, lastEventNumber int64) (int64, error) {
 //				panic("mock out the UpdateOutbox method")
 //			},
-//			WriteEventFunc: func(ctx context.Context, db database.DBTX, event es.Event) error {
+//			WriteEventFunc: func(ctx context.Context, db database.DBTX, event es.Event, content []byte, metadata []byte) error {
 //				panic("mock out the WriteEvent method")
 //			},
 //		}
@@ -52,7 +52,7 @@ type SchemaMock struct {
 	UpdateOutboxFunc func(ctx context.Context, tx database.DBTX, streamType string, streamID string, eventNumber int64, lastEventNumber int64) (int64, error)
 
 	// WriteEventFunc mocks the WriteEvent method.
-	WriteEventFunc func(ctx context.Context, db database.DBTX, event es.Event) error
+	WriteEventFunc func(ctx context.Context, db database.DBTX, event es.Event, content []byte, metadata []byte) error
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -111,6 +111,10 @@ type SchemaMock struct {
 			Db database.DBTX
 			// Event is the event argument value.
 			Event es.Event
+			// Content is the content argument value.
+			Content []byte
+			// Metadata is the metadata argument value.
+			Metadata []byte
 		}
 	}
 	lockInsertOutbox sync.RWMutex
@@ -280,23 +284,27 @@ func (mock *SchemaMock) UpdateOutboxCalls() []struct {
 }
 
 // WriteEvent calls WriteEventFunc.
-func (mock *SchemaMock) WriteEvent(ctx context.Context, db database.DBTX, event es.Event) error {
+func (mock *SchemaMock) WriteEvent(ctx context.Context, db database.DBTX, event es.Event, content []byte, metadata []byte) error {
 	if mock.WriteEventFunc == nil {
 		panic("SchemaMock.WriteEventFunc: method is nil but Schema.WriteEvent was just called")
 	}
 	callInfo := struct {
-		Ctx   context.Context
-		Db    database.DBTX
-		Event es.Event
+		Ctx      context.Context
+		Db       database.DBTX
+		Event    es.Event
+		Content  []byte
+		Metadata []byte
 	}{
-		Ctx:   ctx,
-		Db:    db,
-		Event: event,
+		Ctx:      ctx,
+		Db:       db,
+		Event:    event,
+		Content:  content,
+		Metadata: metadata,
 	}
 	mock.lockWriteEvent.Lock()
 	mock.calls.WriteEvent = append(mock.calls.WriteEvent, callInfo)
 	mock.lockWriteEvent.Unlock()
-	return mock.WriteEventFunc(ctx, db, event)
+	return mock.WriteEventFunc(ctx, db, event, content, metadata)
 }
 
 // WriteEventCalls gets all the calls that were made to WriteEvent.
@@ -304,14 +312,18 @@ func (mock *SchemaMock) WriteEvent(ctx context.Context, db database.DBTX, event 
 //
 //	len(mockedSchema.WriteEventCalls())
 func (mock *SchemaMock) WriteEventCalls() []struct {
-	Ctx   context.Context
-	Db    database.DBTX
-	Event es.Event
+	Ctx      context.Context
+	Db       database.DBTX
+	Event    es.Event
+	Content  []byte
+	Metadata []byte
 } {
 	var calls []struct {
-		Ctx   context.Context
-		Db    database.DBTX
-		Event es.Event
+		Ctx      context.Context
+		Db       database.DBTX
+		Event    es.Event
+		Content  []byte
+		Metadata []byte
 	}
 	mock.lockWriteEvent.RLock()
 	calls = mock.calls.WriteEvent
@@ -388,5 +400,177 @@ func (mock *ValidatorMock) ValidateCalls() []struct {
 	mock.lockValidate.RLock()
 	calls = mock.calls.Validate
 	mock.lockValidate.RUnlock()
+	return calls
+}
+
+// Ensure, that CodecMock does implement eventsio.Codec.
+// If this is not the case, regenerate this file with moq.
+var _ eventsio.Codec = &CodecMock{}
+
+// CodecMock is a mock implementation of eventsio.Codec.
+//
+//	func TestSomethingThatUsesCodec(t *testing.T) {
+//
+//		// make and configure a mocked eventsio.Codec
+//		mockedCodec := &CodecMock{
+//			DecodeFunc: func(streamType string, contentName string, b []byte) (es.Content, error) {
+//				panic("mock out the Decode method")
+//			},
+//			EncodeFunc: func(event es.Event) ([]byte, error) {
+//				panic("mock out the Encode method")
+//			},
+//			RegisterFunc: func(streamType string, contentTypes ...es.Content) error {
+//				panic("mock out the Register method")
+//			},
+//		}
+//
+//		// use mockedCodec in code that requires eventsio.Codec
+//		// and then make assertions.
+//
+//	}
+type CodecMock struct {
+	// DecodeFunc mocks the Decode method.
+	DecodeFunc func(streamType string, contentName string, b []byte) (es.Content, error)
+
+	// EncodeFunc mocks the Encode method.
+	EncodeFunc func(event es.Event) ([]byte, error)
+
+	// RegisterFunc mocks the Register method.
+	RegisterFunc func(streamType string, contentTypes ...es.Content) error
+
+	// calls tracks calls to the methods.
+	calls struct {
+		// Decode holds details about calls to the Decode method.
+		Decode []struct {
+			// StreamType is the streamType argument value.
+			StreamType string
+			// ContentName is the contentName argument value.
+			ContentName string
+			// B is the b argument value.
+			B []byte
+		}
+		// Encode holds details about calls to the Encode method.
+		Encode []struct {
+			// Event is the event argument value.
+			Event es.Event
+		}
+		// Register holds details about calls to the Register method.
+		Register []struct {
+			// StreamType is the streamType argument value.
+			StreamType string
+			// ContentTypes is the contentTypes argument value.
+			ContentTypes []es.Content
+		}
+	}
+	lockDecode   sync.RWMutex
+	lockEncode   sync.RWMutex
+	lockRegister sync.RWMutex
+}
+
+// Decode calls DecodeFunc.
+func (mock *CodecMock) Decode(streamType string, contentName string, b []byte) (es.Content, error) {
+	if mock.DecodeFunc == nil {
+		panic("CodecMock.DecodeFunc: method is nil but Codec.Decode was just called")
+	}
+	callInfo := struct {
+		StreamType  string
+		ContentName string
+		B           []byte
+	}{
+		StreamType:  streamType,
+		ContentName: contentName,
+		B:           b,
+	}
+	mock.lockDecode.Lock()
+	mock.calls.Decode = append(mock.calls.Decode, callInfo)
+	mock.lockDecode.Unlock()
+	return mock.DecodeFunc(streamType, contentName, b)
+}
+
+// DecodeCalls gets all the calls that were made to Decode.
+// Check the length with:
+//
+//	len(mockedCodec.DecodeCalls())
+func (mock *CodecMock) DecodeCalls() []struct {
+	StreamType  string
+	ContentName string
+	B           []byte
+} {
+	var calls []struct {
+		StreamType  string
+		ContentName string
+		B           []byte
+	}
+	mock.lockDecode.RLock()
+	calls = mock.calls.Decode
+	mock.lockDecode.RUnlock()
+	return calls
+}
+
+// Encode calls EncodeFunc.
+func (mock *CodecMock) Encode(event es.Event) ([]byte, error) {
+	if mock.EncodeFunc == nil {
+		panic("CodecMock.EncodeFunc: method is nil but Codec.Encode was just called")
+	}
+	callInfo := struct {
+		Event es.Event
+	}{
+		Event: event,
+	}
+	mock.lockEncode.Lock()
+	mock.calls.Encode = append(mock.calls.Encode, callInfo)
+	mock.lockEncode.Unlock()
+	return mock.EncodeFunc(event)
+}
+
+// EncodeCalls gets all the calls that were made to Encode.
+// Check the length with:
+//
+//	len(mockedCodec.EncodeCalls())
+func (mock *CodecMock) EncodeCalls() []struct {
+	Event es.Event
+} {
+	var calls []struct {
+		Event es.Event
+	}
+	mock.lockEncode.RLock()
+	calls = mock.calls.Encode
+	mock.lockEncode.RUnlock()
+	return calls
+}
+
+// Register calls RegisterFunc.
+func (mock *CodecMock) Register(streamType string, contentTypes ...es.Content) error {
+	if mock.RegisterFunc == nil {
+		panic("CodecMock.RegisterFunc: method is nil but Codec.Register was just called")
+	}
+	callInfo := struct {
+		StreamType   string
+		ContentTypes []es.Content
+	}{
+		StreamType:   streamType,
+		ContentTypes: contentTypes,
+	}
+	mock.lockRegister.Lock()
+	mock.calls.Register = append(mock.calls.Register, callInfo)
+	mock.lockRegister.Unlock()
+	return mock.RegisterFunc(streamType, contentTypes...)
+}
+
+// RegisterCalls gets all the calls that were made to Register.
+// Check the length with:
+//
+//	len(mockedCodec.RegisterCalls())
+func (mock *CodecMock) RegisterCalls() []struct {
+	StreamType   string
+	ContentTypes []es.Content
+} {
+	var calls []struct {
+		StreamType   string
+		ContentTypes []es.Content
+	}
+	mock.lockRegister.RLock()
+	calls = mock.calls.Register
+	mock.lockRegister.RUnlock()
 	return calls
 }
