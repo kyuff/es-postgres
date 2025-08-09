@@ -3,7 +3,6 @@ package processor_test
 import (
 	"context"
 	"errors"
-	"fmt"
 	"iter"
 	"testing"
 	"time"
@@ -14,51 +13,13 @@ import (
 	"github.com/kyuff/es-postgres/internal/database"
 	"github.com/kyuff/es-postgres/internal/processor"
 	"github.com/kyuff/es-postgres/internal/seqs"
+	"github.com/kyuff/es-postgres/internal/testdata"
 	"github.com/kyuff/es-postgres/internal/uuid"
 )
-
-type MockEvent struct {
-}
-
-func (MockEvent) EventName() string {
-	return "MockEvent"
-}
 
 func TestProcess(t *testing.T) {
 
 	var (
-		newEvent = func(eventNumber int64, mods ...func(e *es.Event)) es.Event {
-			e := es.Event{
-				StreamID:     fmt.Sprintf("StreamID-%d", eventNumber),
-				StreamType:   fmt.Sprintf("StreamType-%d", eventNumber),
-				EventNumber:  eventNumber,
-				StoreEventID: uuid.V7(),
-				EventTime:    time.Now().Add(time.Second * time.Duration(eventNumber)).Truncate(time.Second),
-				Content:      MockEvent{},
-			}
-			for _, mod := range mods {
-				mod(&e)
-			}
-
-			return e
-		}
-		newEvents = func(stream database.Stream, count int) []es.Event {
-			var events []es.Event
-			var streamType = stream.Type
-			var streamID = uuid.V7()
-			var storeEventIDs = uuid.V7At(time.Now(), count)
-			for i := 1; i <= count; i++ {
-				events = append(events, newEvent(int64(i), func(e *es.Event) {
-					e.StreamType = streamType
-					e.StreamID = streamID
-					e.StoreEventID = storeEventIDs[i-1]
-					e.StoreStreamID = stream.StoreID
-					e.Content = MockEvent{}
-				}))
-			}
-
-			return events
-		}
 		eventsEqual = func(t *testing.T) func(expected, got assert.KeyValue[es.Event, error]) bool {
 			return func(expected, got assert.KeyValue[es.Event, error]) bool {
 				return assert.Equal(t, expected.Key.StreamID, got.Key.StreamID) &&
@@ -73,12 +34,6 @@ func TestProcess(t *testing.T) {
 		newBackoff = func(d time.Duration) func(streamType string, retries int64) time.Duration {
 			return func(streamType string, retries int64) time.Duration {
 				return d
-			}
-		}
-		newStream = func() database.Stream {
-			return database.Stream{
-				StoreID: uuid.V7(),
-				Type:    uuid.V7(),
 			}
 		}
 		failAfterWriter = func(after int) func(ctx context.Context, streamType string, events iter.Seq2[es.Event, error]) error {
@@ -149,7 +104,7 @@ func TestProcess(t *testing.T) {
 			backoff = newBackoff(time.Millisecond)
 			p       = processor.New(conn, schema, w, rd, backoff)
 
-			stream = newStream()
+			stream = testdata.Stream()
 		)
 
 		w.WriteFunc = failDirectWriter()
@@ -171,10 +126,13 @@ func TestProcess(t *testing.T) {
 			backoff = newBackoff(time.Millisecond)
 			p       = processor.New(conn, schema, w, rd, backoff)
 
-			stream    = newStream()
+			stream    = testdata.Stream()
 			watermark = newWatermark(0, 0)
-			events    = newEvents(stream, 3)
-			got       []es.Event
+			events    = testdata.Events(3, func(e *es.Event) {
+				e.StreamType = stream.Type
+				e.StoreStreamID = stream.StoreID
+			})
+			got []es.Event
 		)
 
 		conn.AcquireWriteStreamFunc = acquireWriteStream(&pgxpool.Conn{}, nil)
@@ -221,9 +179,12 @@ func TestProcess(t *testing.T) {
 			backoff = newBackoff(time.Millisecond)
 			p       = processor.New(conn, schema, w, rd, backoff)
 
-			stream    = newStream()
+			stream    = testdata.Stream()
 			watermark = newWatermark(3, 0)
-			events    = newEvents(stream, 10)
+			events    = testdata.Events(10, func(e *es.Event) {
+				e.StreamType = stream.Type
+				e.StoreStreamID = stream.StoreID
+			})
 		)
 
 		conn.AcquireWriteStreamFunc = acquireWriteStream(nil, errors.New("fail"))
@@ -255,9 +216,12 @@ func TestProcess(t *testing.T) {
 			backoff = newBackoff(time.Millisecond)
 			p       = processor.New(conn, schema, w, rd, backoff)
 
-			stream    = newStream()
+			stream    = testdata.Stream()
 			watermark = newWatermark(3, 0)
-			events    = newEvents(stream, 10)
+			events    = testdata.Events(10, func(e *es.Event) {
+				e.StreamType = stream.Type
+				e.StoreStreamID = stream.StoreID
+			})
 		)
 
 		conn.AcquireWriteStreamFunc = acquireWriteStream(&pgxpool.Conn{}, nil)
@@ -289,10 +253,13 @@ func TestProcess(t *testing.T) {
 			backoff = newBackoff(time.Millisecond)
 			p       = processor.New(conn, schema, w, rd, backoff)
 
-			stream    = newStream()
+			stream    = testdata.Stream()
 			watermark = newWatermark(0, 0)
-			events    = newEvents(stream, 9)
-			got       []es.Event
+			events    = testdata.Events(9, func(e *es.Event) {
+				e.StreamType = stream.Type
+				e.StoreStreamID = stream.StoreID
+			})
+			got []es.Event
 		)
 
 		conn.AcquireWriteStreamFunc = acquireWriteStream(&pgxpool.Conn{}, nil)
@@ -339,14 +306,17 @@ func TestProcess(t *testing.T) {
 			backoff = newBackoff(time.Millisecond)
 			p       = processor.New(conn, schema, w, rd, backoff)
 
-			stream    = newStream()
+			stream    = testdata.Stream()
 			watermark = newWatermark(3, 0)
 		)
 
 		conn.AcquireWriteStreamFunc = acquireWriteStream(&pgxpool.Conn{}, nil)
 		schema.SelectOutboxWatermarkFunc = selectWatermark(watermark, 0, nil)
 		schema.UpdateOutboxWatermarkFunc = updateWatermark(nil)
-		rd.ReadFunc = readerFunc(stream.Type, watermark.StreamID, newEvents(stream, 10))
+		rd.ReadFunc = readerFunc(stream.Type, watermark.StreamID, testdata.Events(10, func(e *es.Event) {
+			e.StreamType = stream.Type
+			e.StoreStreamID = stream.StoreID
+		}))
 
 		w.WriteFunc = func(ctx context.Context, streamType string, events iter.Seq2[es.Event, error]) error {
 			panic("fail")
@@ -372,7 +342,7 @@ func TestProcess(t *testing.T) {
 			backoff = newBackoff(time.Millisecond)
 			p       = processor.New(conn, schema, w, rd, backoff)
 
-			stream    = newStream()
+			stream    = testdata.Stream()
 			watermark = newWatermark(10, 0)
 		)
 
@@ -407,10 +377,13 @@ func TestProcess(t *testing.T) {
 			backoff = newBackoff(time.Millisecond)
 			p       = processor.New(conn, schema, w, rd, backoff)
 
-			stream    = newStream()
+			stream    = testdata.Stream()
 			watermark = newWatermark(0, 0)
-			events    = newEvents(stream, 10)
-			got       []es.Event
+			events    = testdata.Events(10, func(e *es.Event) {
+				e.StreamType = stream.Type
+				e.StoreStreamID = stream.StoreID
+			})
+			got []es.Event
 		)
 
 		conn.AcquireWriteStreamFunc = acquireWriteStream(&pgxpool.Conn{}, nil)
