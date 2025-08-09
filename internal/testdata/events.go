@@ -20,6 +20,14 @@ func StreamID() string {
 	return uuid.V7()
 }
 
+func StreamIDs(n int) []string {
+	var ids []string
+	for range n {
+		ids = append(ids, StreamID())
+	}
+	return ids
+}
+
 func StreamType() string {
 	return uuid.V7()
 }

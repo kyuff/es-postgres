@@ -10,28 +10,12 @@ import (
 	"github.com/kyuff/es"
 	"github.com/kyuff/es-postgres/internal/assert"
 	"github.com/kyuff/es-postgres/internal/database"
+	"github.com/kyuff/es-postgres/internal/testdata"
 	"github.com/kyuff/es-postgres/internal/uuid"
 )
 
-type MockEvent struct {
-}
-
-func (MockEvent) EventName() string {
-	return "MockEvent"
-}
-
 func TestSchema(t *testing.T) {
 	var (
-		newStreamType    = uuid.V7
-		newStreamID      = uuid.V7
-		newStoreStreamID = uuid.V7
-		newStreamIDs     = func(n int) []string {
-			var ids []string
-			for range n {
-				ids = append(ids, newStreamID())
-			}
-			return ids
-		}
 		newPartitions = func(partitions ...uint32) []uint32 {
 			return partitions
 		}
@@ -63,33 +47,6 @@ func TestSchema(t *testing.T) {
 				t.FailNow()
 			}
 			return pool, schema
-		}
-		newEvent = func(eventNumber int64, mods ...func(e *es.Event)) es.Event {
-			e := es.Event{
-				StreamID:      uuid.V7(),
-				StreamType:    uuid.V7(),
-				EventNumber:   eventNumber,
-				EventTime:     time.Now().Add(time.Second * time.Duration(eventNumber)).Truncate(time.Second),
-				Content:       MockEvent{},
-				StoreEventID:  uuid.V7(),
-				StoreStreamID: uuid.V7(),
-			}
-			for _, mod := range mods {
-				mod(&e)
-			}
-
-			return e
-		}
-		newEvents = func(streamType, streamID string, count int) []es.Event {
-			var events []es.Event
-			for i := 1; i <= count; i++ {
-				events = append(events, newEvent(int64(i), func(e *es.Event) {
-					e.StreamType = streamType
-					e.StreamID = streamID
-				}))
-			}
-
-			return events
 		}
 		writeEvents = func(t *testing.T, db database.DBTX, schema *database.Schema, events []es.Event) {
 			for _, event := range events {
@@ -135,7 +92,7 @@ func TestSchema(t *testing.T) {
 			assert.Equalf(t, len(expected), n, "number of events")
 		}
 		insertOutbox = func(t *testing.T, conn database.DBTX, schema *database.Schema, streams []database.Stream, eventNumber, watermark int64, partition uint32) {
-			streamIDs := newStreamIDs(len(streams))
+			streamIDs := testdata.StreamIDs(len(streams))
 			for i, stream := range streams {
 				if _, err := schema.InsertOutbox(t.Context(), conn, stream.Type, streamIDs[i], stream.StoreID, eventNumber, watermark, partition); err != nil {
 					t.Fatal(err)
@@ -165,11 +122,14 @@ func TestSchema(t *testing.T) {
 			// arrange
 			var (
 				conn, schema = newSchema(t)
-				streamType   = newStreamType()
-				streamID     = newStreamID()
-				events       = newEvents(streamType, streamID, 1)
-				content      = []byte(`{}`)
-				metadata     = []byte(`{}`)
+				streamType   = testdata.StreamType()
+				streamID     = testdata.StreamID()
+				events       = testdata.Events(1, func(e *es.Event) {
+					e.StreamType = streamType
+					e.StreamID = streamID
+				})
+				content  = []byte(`{}`)
+				metadata = []byte(`{}`)
 			)
 
 			// act
@@ -183,11 +143,14 @@ func TestSchema(t *testing.T) {
 			// arrange
 			var (
 				conn, schema = newSchema(t)
-				streamType   = newStreamType()
-				streamID     = newStreamID()
-				events       = newEvents(streamType, streamID, 1)
-				content      = []byte(`{}`)
-				metadata     = []byte(`{}`)
+				streamType   = testdata.StreamType()
+				streamID     = testdata.StreamID()
+				events       = testdata.Events(1, func(e *es.Event) {
+					e.StreamType = streamType
+					e.StreamID = streamID
+				})
+				content  = []byte(`{}`)
+				metadata = []byte(`{}`)
 			)
 
 			assert.NoError(t, schema.WriteEvent(t.Context(), conn, events[0], content, metadata))
@@ -205,9 +168,12 @@ func TestSchema(t *testing.T) {
 			// arrange
 			var (
 				conn, schema = newSchema(t)
-				streamType   = newStreamType()
-				streamID     = newStreamID()
-				events       = newEvents(streamType, streamID, 10)
+				streamType   = testdata.StreamType()
+				streamID     = testdata.StreamID()
+				events       = testdata.Events(10, func(e *es.Event) {
+					e.StreamType = streamType
+					e.StreamID = streamID
+				})
 			)
 
 			writeEvents(t, conn, schema, events)
@@ -224,9 +190,12 @@ func TestSchema(t *testing.T) {
 			// arrange
 			var (
 				conn, schema = newSchema(t)
-				streamType   = newStreamType()
-				streamID     = newStreamID()
-				events       = newEvents(streamType, streamID, 10)
+				streamType   = testdata.StreamType()
+				streamID     = testdata.StreamID()
+				events       = testdata.Events(10, func(e *es.Event) {
+					e.StreamType = streamType
+					e.StreamID = streamID
+				})
 			)
 
 			writeEvents(t, conn, schema, events)
@@ -243,8 +212,8 @@ func TestSchema(t *testing.T) {
 			// arrange
 			var (
 				conn, schema = newSchema(t)
-				streamType   = newStreamType()
-				streamID     = newStreamID()
+				streamType   = testdata.StreamType()
+				streamID     = testdata.StreamID()
 			)
 
 			// act
@@ -261,9 +230,9 @@ func TestSchema(t *testing.T) {
 			// arrange
 			var (
 				conn, schema         = newSchema(t)
-				streamType           = newStreamType()
-				streamID             = newStreamID()
-				storeStreamID        = newStoreStreamID()
+				streamType           = testdata.StreamType()
+				streamID             = testdata.StreamID()
+				storeStreamID        = testdata.StoreStreamID()
 				eventNumber   int64  = 3
 				watermark     int64  = 3
 				partition     uint32 = 5
@@ -281,9 +250,9 @@ func TestSchema(t *testing.T) {
 			// arrange
 			var (
 				conn, schema         = newSchema(t)
-				streamType           = newStreamType()
-				streamID             = newStreamID()
-				storeStreamID        = newStoreStreamID()
+				streamType           = testdata.StreamType()
+				streamID             = testdata.StreamID()
+				storeStreamID        = testdata.StoreStreamID()
 				eventNumber   int64  = 3
 				watermark     int64  = 3
 				partition     uint32 = 5
@@ -307,9 +276,9 @@ func TestSchema(t *testing.T) {
 			// arrange
 			var (
 				conn, schema         = newSchema(t)
-				streamType           = newStreamType()
-				streamID             = newStreamID()
-				storeStreamID        = newStoreStreamID()
+				streamType           = testdata.StreamType()
+				streamID             = testdata.StreamID()
+				storeStreamID        = testdata.StoreStreamID()
 				eventNumber   int64  = 3
 				watermark     int64  = 3
 				partition     uint32 = 5
@@ -331,8 +300,8 @@ func TestSchema(t *testing.T) {
 			// arrange
 			var (
 				conn, schema       = newSchema(t)
-				streamType         = newStreamType()
-				streamID           = newStreamID()
+				streamType         = testdata.StreamType()
+				streamID           = testdata.StreamID()
 				eventNumber  int64 = 3
 			)
 
@@ -348,9 +317,9 @@ func TestSchema(t *testing.T) {
 			// arrange
 			var (
 				conn, schema            = newSchema(t)
-				streamType              = newStreamType()
-				streamID                = newStreamID()
-				storeStreamID           = newStoreStreamID()
+				streamType              = testdata.StreamType()
+				streamID                = testdata.StreamID()
+				storeStreamID           = testdata.StoreStreamID()
 				eventNumber      int64  = 3
 				watermark        int64  = 3
 				partition        uint32 = 5
@@ -375,10 +344,10 @@ func TestSchema(t *testing.T) {
 			// arrange
 			var (
 				conn, schema         = newSchema(t)
-				streamType           = newStreamType()
+				streamType           = testdata.StreamType()
 				count                = 10
 				storeStreamIDs       = uuid.V7At(time.Now(), count)
-				streamIDs            = newStreamIDs(count)
+				streamIDs            = testdata.StreamIDs(count)
 				token                = ""
 				limit          int64 = 100
 			)
@@ -402,10 +371,10 @@ func TestSchema(t *testing.T) {
 			// arrange
 			var (
 				conn, schema         = newSchema(t)
-				streamType           = newStreamType()
+				streamType           = testdata.StreamType()
 				count                = 10
 				storeStreamIDs       = uuid.V7At(time.Now(), count)
-				streamIDs            = newStreamIDs(count)
+				streamIDs            = testdata.StreamIDs(count)
 				token                = ""
 				limit          int64 = 5
 			)
@@ -429,10 +398,10 @@ func TestSchema(t *testing.T) {
 			// arrange
 			var (
 				conn, schema         = newSchema(t)
-				streamType           = newStreamType()
+				streamType           = testdata.StreamType()
 				count                = 10
 				storeStreamIDs       = uuid.V7At(time.Now(), count)
-				streamIDs            = newStreamIDs(count)
+				streamIDs            = testdata.StreamIDs(count)
 				offset               = 4
 				token                = storeStreamIDs[offset-1]
 				limit          int64 = 100
@@ -457,10 +426,10 @@ func TestSchema(t *testing.T) {
 			// arrange
 			var (
 				conn, schema         = newSchema(t)
-				streamType           = newStreamType()
+				streamType           = testdata.StreamType()
 				count                = 10
 				storeStreamIDs       = uuid.V7At(time.Now(), count)
-				streamIDs            = newStreamIDs(count)
+				streamIDs            = testdata.StreamIDs(count)
 				token                = storeStreamIDs[count-1]
 				limit          int64 = 100
 			)
@@ -486,7 +455,7 @@ func TestSchema(t *testing.T) {
 			// arrange
 			var (
 				conn, schema = newSchema(t)
-				streamType   = newStreamType()
+				streamType   = testdata.StreamType()
 				count        = 10
 				streams      = newStreams(streamType, count)
 				token        = ""
@@ -509,7 +478,7 @@ func TestSchema(t *testing.T) {
 			// arrange
 			var (
 				conn, schema = newSchema(t)
-				streamType   = newStreamType()
+				streamType   = testdata.StreamType()
 				count        = 10
 				streams      = newStreams(streamType, count)
 				ignored      = newStreams(streamType, count)
@@ -534,7 +503,7 @@ func TestSchema(t *testing.T) {
 			// arrange
 			var (
 				conn, schema = newSchema(t)
-				streamType   = newStreamType()
+				streamType   = testdata.StreamType()
 				count        = 10
 				streams      = newStreams(streamType, count)
 				ignored      = newStreams(streamType, count)
@@ -559,7 +528,7 @@ func TestSchema(t *testing.T) {
 			// arrange
 			var (
 				conn, schema = newSchema(t)
-				streamType   = newStreamType()
+				streamType   = testdata.StreamType()
 				count        = 10
 				streams      = newStreams(streamType, count)
 				token        = ""
@@ -582,7 +551,7 @@ func TestSchema(t *testing.T) {
 			// arrange
 			var (
 				conn, schema = newSchema(t)
-				streamType   = newStreamType()
+				streamType   = testdata.StreamType()
 				count        = 10
 				streams      = newStreams(streamType, count)
 				start        = 5
@@ -606,7 +575,7 @@ func TestSchema(t *testing.T) {
 			// arrange
 			var (
 				conn, schema = newSchema(t)
-				streamType   = newStreamType()
+				streamType   = testdata.StreamType()
 				count        = 10
 				streams      = newStreams(streamType, count)
 				start        = 5
@@ -645,9 +614,9 @@ func TestSchema(t *testing.T) {
 			// arrange
 			var (
 				conn, schema  = newSchema(t)
-				streamType    = newStreamType()
-				streamID      = newStreamID()
-				storeStreamID = newStoreStreamID()
+				streamType    = testdata.StreamType()
+				streamID      = testdata.StreamID()
+				storeStreamID = testdata.StoreStreamID()
 				stream        = newStream(streamType, storeStreamID)
 			)
 
@@ -673,8 +642,8 @@ func TestSchema(t *testing.T) {
 			// arrange
 			var (
 				conn, schema  = newSchema(t)
-				streamType    = newStreamType()
-				storeStreamID = newStoreStreamID()
+				streamType    = testdata.StreamType()
+				storeStreamID = testdata.StoreStreamID()
 				stream        = newStream(streamType, storeStreamID)
 			)
 			// act
@@ -690,9 +659,9 @@ func TestSchema(t *testing.T) {
 			// arrange
 			var (
 				conn, schema  = newSchema(t)
-				streamType    = newStreamType()
-				streamID      = newStreamID()
-				storeStreamID = newStoreStreamID()
+				streamType    = testdata.StreamType()
+				streamID      = testdata.StreamID()
+				storeStreamID = testdata.StoreStreamID()
 				stream        = newStream(streamType, storeStreamID)
 				delay         = time.Millisecond
 			)
@@ -717,8 +686,8 @@ func TestSchema(t *testing.T) {
 			// arrange
 			var (
 				conn, schema  = newSchema(t)
-				streamType    = newStreamType()
-				storeStreamID = newStoreStreamID()
+				streamType    = testdata.StreamType()
+				storeStreamID = testdata.StoreStreamID()
 				stream        = newStream(streamType, storeStreamID)
 				delay         = time.Millisecond
 			)
