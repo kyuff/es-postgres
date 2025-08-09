@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"iter"
 	"math/rand"
+	"sync"
 	"testing"
 	"time"
 
@@ -369,9 +370,12 @@ func TestStorage(t *testing.T) {
 				streamID   = newStreamID()
 				events     = newEvents(streamType, streamID, 10)
 				got        []es.Event
+				mu         sync.RWMutex
 			)
 
 			w.WriteFunc = func(ctx context.Context, typ string, eventSeq iter.Seq2[es.Event, error]) error {
+				mu.Lock()
+				defer mu.Unlock()
 				assert.Equalf(t, streamType, typ, "stream type mismatch")
 				for event, err := range eventSeq {
 					if assert.NoError(t, err) {
@@ -393,6 +397,9 @@ func TestStorage(t *testing.T) {
 			// assert
 			assert.NoError(t, err)
 			assert.NoErrorEventually(t, time.Second*5, func() error {
+				mu.RLock()
+				defer mu.RUnlock()
+
 				if len(got) < 10 {
 					return errors.New("no events received")
 				}
@@ -416,9 +423,13 @@ func TestStorage(t *testing.T) {
 				events     = newEvents(streamType, streamID, 10)
 				got        []es.Event
 				writes     = 0
+				mu         sync.RWMutex
 			)
 
 			w.WriteFunc = func(ctx context.Context, typ string, eventSeq iter.Seq2[es.Event, error]) error {
+				mu.Lock()
+				defer mu.Unlock()
+
 				writes++
 				if writes < 3 {
 					return errors.New("test write error")
@@ -445,6 +456,9 @@ func TestStorage(t *testing.T) {
 			// assert
 			assert.NoError(t, err)
 			assert.NoErrorEventually(t, time.Second*2, func() error {
+				mu.RLock()
+				defer mu.RUnlock()
+
 				if len(got) < 10 {
 					return errors.New("no events received")
 				}

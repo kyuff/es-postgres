@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -10,6 +11,7 @@ import (
 	"github.com/kyuff/es-postgres/internal/uuid"
 )
 
+var once sync.Once
 var sql = sqlQueries{}
 
 type sqlQueries struct {
@@ -29,21 +31,24 @@ type sqlQueries struct {
 }
 
 func NewSchema(prefix string) (*Schema, error) {
-	err := renderTemplates(prefix,
-		&sql.selectCurrentMigration,
-		&sql.advisoryLock,
-		&sql.advisoryUnlock,
-		&sql.createMigrationTable,
-		&sql.insertMigrationRow,
-		&sql.selectEvents,
-		&sql.writeEvent,
-		&sql.insertOutbox,
-		&sql.updateOutbox,
-		&sql.selectStreamIDs,
-		&sql.selectOutboxStreamIDs,
-		&sql.selectOutboxWatermark,
-		&sql.updateOutboxWatermark,
-	)
+	var err error
+	once.Do(func() {
+		err = renderTemplates(prefix,
+			&sql.selectCurrentMigration,
+			&sql.advisoryLock,
+			&sql.advisoryUnlock,
+			&sql.createMigrationTable,
+			&sql.insertMigrationRow,
+			&sql.selectEvents,
+			&sql.writeEvent,
+			&sql.insertOutbox,
+			&sql.updateOutbox,
+			&sql.selectStreamIDs,
+			&sql.selectOutboxStreamIDs,
+			&sql.selectOutboxWatermark,
+			&sql.updateOutboxWatermark,
+		)
+	})
 	if err != nil {
 		return nil, err
 	}
