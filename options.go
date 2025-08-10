@@ -10,8 +10,13 @@ import (
 
 	"github.com/kyuff/es-postgres/backoff"
 	"github.com/kyuff/es-postgres/internal/hash"
+	"github.com/kyuff/es-postgres/internal/leases"
 	"github.com/kyuff/es-postgres/internal/logger"
 	"github.com/kyuff/es/codecs"
+)
+
+const (
+	defaultPartitionCount = 1024
 )
 
 type Config struct {
@@ -25,6 +30,7 @@ type Config struct {
 	reconcileTimeout    time.Duration
 	processTimeout      time.Duration
 	processBackoff      func(streamType string, retryCount int64) time.Duration
+	leases              leases.Config
 }
 
 func defaultOptions() *Config {
@@ -34,12 +40,13 @@ func defaultOptions() *Config {
 		WithStartContext(context.Background()),
 		WithTablePrefix("es"),
 		withJsonCodec(),
-		WithFNVPartitioner(128),
 		WithReconcileInterval(time.Second*10),
 		WithReconcileTimeout(time.Second*5),
 		WithProcessTimeout(time.Second*3),
 		WithLinearProcessBackoff(time.Second),
 		WithReconcilePublishing(true),
+		WithFNVPartitioner(defaultPartitionCount),
+		withLeaseRange(0, defaultPartitionCount),
 	)
 
 }
@@ -75,15 +82,14 @@ func (c *Config) validate() error {
 		return errors.New("missing process backoff")
 	}
 
+	if err := c.leases.Validate(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 type Option func(cfg *Config)
-
-type Logger interface {
-	InfofCtx(ctx context.Context, template string, args ...any)
-	ErrorfCtx(ctx context.Context, template string, args ...any)
-}
 
 func applyOptions(options *Config, opts ...Option) *Config {
 	for _, opt := range opts {
@@ -208,5 +214,12 @@ func WithExponentialProcessBackoff(base time.Duration) Option {
 func WithReconcilePublishing(enabled bool) Option {
 	return func(cfg *Config) {
 		cfg.reconcilePublishing = enabled
+	}
+}
+
+// withLeaseRange sets the range of leases used by the consistent hashing mechanism.
+func withLeaseRange(from, to uint32) Option {
+	return func(cfg *Config) {
+		leases.WithRange(from, to)(&cfg.leases)
 	}
 }

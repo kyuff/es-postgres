@@ -11,6 +11,7 @@ import (
 	"github.com/kyuff/es"
 	"github.com/kyuff/es-postgres/internal/database"
 	"github.com/kyuff/es-postgres/internal/eventsio"
+	"github.com/kyuff/es-postgres/internal/leases"
 	"github.com/kyuff/es-postgres/internal/processor"
 	"github.com/kyuff/es-postgres/internal/reconcilers"
 	"github.com/kyuff/es-postgres/internal/uuid"
@@ -58,7 +59,7 @@ func New(connector Connector, opts ...Option) (*Storage, error) {
 	}
 
 	var (
-		valuer = newFixedSizeValuer(128) // TODO Option for size
+		valuer = leases.NewConsistentHashRing(cfg.leases)
 	)
 
 	return &Storage{
