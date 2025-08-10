@@ -66,6 +66,7 @@ func New(connector Connector, opts ...Option) (*Storage, error) {
 		cfg:       cfg,
 		connector: connector,
 		schema:    schema,
+		leases:    valuer,
 		reader:    eventsio.NewReader(connector, schema, cfg.codec),
 		writer:    eventsio.NewWriter(schema, eventsio.NewValidator(), cfg.codec, cfg.partitioner),
 		reconciles: []reconcilers.Reconciler{
@@ -88,6 +89,7 @@ type Storage struct {
 	cfg        *Config
 	connector  Connector
 	schema     *database.Schema
+	leases     *leases.ConsistentHashRing
 	reader     reader
 	writer     writer
 	reconciles []reconcilers.Reconciler
@@ -124,6 +126,11 @@ func (s *Storage) StartPublish(ctx context.Context, w es.Writer) error {
 	g, publishCtx := errgroup.WithContext(ctx)
 
 	p := processor.New(s.connector, s.schema, w, s.reader, s.cfg.processBackoff)
+
+	g.Go(func() error {
+		return s.leases.Start(ctx)
+	})
+
 	for _, r := range s.reconciles {
 		g.Go(func() error {
 			return r.Reconcile(publishCtx, p)

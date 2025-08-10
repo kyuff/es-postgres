@@ -49,6 +49,7 @@ func defaultOptions() *Config {
 		withLeaseRange(0, defaultPartitionCount),
 		withLeaseNodeName(hash.RandomString(12)),
 		withLeaseVNodeCount(5),
+		withLeaseHeartbeatInterval(2*time.Second),
 	)
 
 }
@@ -235,5 +236,11 @@ func withLeaseNodeName(nodeName string) Option {
 func withLeaseVNodeCount(count uint32) Option {
 	return func(cfg *Config) {
 		leases.WithVNodeCount(count)(&cfg.leases)
+	}
+}
+
+func withLeaseHeartbeatInterval(interval time.Duration) Option {
+	return func(cfg *Config) {
+		leases.WithHeartbeatInterval(interval)(&cfg.leases)
 	}
 }

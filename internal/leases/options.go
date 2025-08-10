@@ -3,6 +3,7 @@ package leases
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 type Config struct {
@@ -10,6 +11,7 @@ type Config struct {
 	From       uint32
 	To         uint32
 	VNodeCount uint32
+	Heartbeat  time.Duration
 }
 
 type Option func(cfg *Config)
@@ -31,6 +33,10 @@ func (cfg Config) Validate() error {
 		return fmt.Errorf("leases: vnode count (%d) must be less than range size (%d - %d)", cfg.VNodeCount, cfg.From, cfg.To)
 	}
 
+	if cfg.Heartbeat == 0 {
+		return fmt.Errorf("leases: heartbeat interval must be greater than 0")
+	}
+
 	return nil
 }
 
@@ -50,5 +56,11 @@ func WithNodeName(nodeName string) Option {
 func WithVNodeCount(count uint32) Option {
 	return func(cfg *Config) {
 		cfg.VNodeCount = count
+	}
+}
+
+func WithHeartbeatInterval(interval time.Duration) Option {
+	return func(cfg *Config) {
+		cfg.Heartbeat = interval
 	}
 }
