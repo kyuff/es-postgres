@@ -38,3 +38,12 @@ CREATE INDEX IF NOT EXISTS {{ .Prefix }}_outbox_stream_type_index
 
 CREATE INDEX IF NOT EXISTS {{ .Prefix }}_outbox_store_stream_id_index
 ON {{ .Prefix }}_outbox (store_stream_id, stream_type);
+
+CREATE TABLE IF NOT EXISTS {{ .Prefix }}_leases
+(
+    vnode             INTEGER     NOT NULL, -- vnode position on the hash ring
+    node_name         VARCHAR     NOT NULL, -- name of the lease owner
+    ttl               timestamptz NOT NULL, -- time from which the lease is invalid
+    status            VARCHAR     NOT NULL, -- indicates if the lease is applied
+    PRIMARY KEY (vnode)
+);
