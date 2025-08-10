@@ -1,4 +1,4 @@
-package postgres
+package eventsio
 
 import (
 	"context"
@@ -7,28 +7,23 @@ import (
 	"iter"
 
 	"github.com/kyuff/es"
-	"github.com/kyuff/es-postgres/internal/database"
 )
 
-type reader interface {
-	Read(ctx context.Context, streamType, streamID string, eventNumber int64) iter.Seq2[es.Event, error]
-}
-
-func newEventReader(onnector Connector, schema *database.Schema, codec codec) *eventReader {
-	return &eventReader{
-		connector: onnector,
+func NewReader(connector Connector, schema Schema, codec Codec) *Reader {
+	return &Reader{
+		connector: connector,
 		schema:    schema,
 		codec:     codec,
 	}
 }
 
-type eventReader struct {
+type Reader struct {
 	connector Connector
-	schema    *database.Schema
-	codec     codec
+	schema    Schema
+	codec     Codec
 }
 
-func (rd *eventReader) Read(ctx context.Context, streamType, streamID string, eventNumber int64) iter.Seq2[es.Event, error] {
+func (rd *Reader) Read(ctx context.Context, streamType, streamID string, eventNumber int64) iter.Seq2[es.Event, error] {
 	return func(yield func(es.Event, error) bool) {
 		db, err := rd.connector.AcquireReadStream(ctx, streamType, streamID)
 		if err != nil {

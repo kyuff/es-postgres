@@ -184,7 +184,7 @@ INSERT INTO {{ .Prefix }}_events (
                             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9);`
 }
 
-func (s *Schema) WriteEvent(ctx context.Context, db DBTX, event es.Event) error {
+func (s *Schema) WriteEvent(ctx context.Context, db DBTX, event es.Event, content []byte, metadata []byte) error {
 	_, err := db.Exec(ctx, sql.writeEvent,
 		event.StreamType,
 		event.StreamID,
@@ -193,7 +193,7 @@ func (s *Schema) WriteEvent(ctx context.Context, db DBTX, event es.Event) error 
 		event.StoreEventID,
 		event.StoreStreamID,
 		event.Content.EventName(),
-		event.Content,
+		content,
 		`{}`,
 	)
 	return err

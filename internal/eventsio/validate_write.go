@@ -1,4 +1,4 @@
-package postgres
+package eventsio
 
 import (
 	"fmt"
@@ -7,7 +7,11 @@ import (
 	"github.com/kyuff/es"
 )
 
-func validateStreamWrite(streamType string, events iter.Seq2[es.Event, error]) iter.Seq2[es.Event, error] {
+func NewValidator() ValidatorFunc {
+	return validateWrite
+}
+
+func validateWrite(streamType string, events iter.Seq2[es.Event, error]) iter.Seq2[es.Event, error] {
 	return func(yield func(es.Event, error) bool) {
 		var (
 			first         = true
