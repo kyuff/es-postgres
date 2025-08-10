@@ -48,6 +48,7 @@ func defaultOptions() *Config {
 		WithFNVPartitioner(defaultPartitionCount),
 		withLeaseRange(0, defaultPartitionCount),
 		withLeaseNodeName(hash.RandomString(12)),
+		withLeaseVNodeCount(5),
 	)
 
 }
@@ -228,5 +229,11 @@ func withLeaseRange(from, to uint32) Option {
 func withLeaseNodeName(nodeName string) Option {
 	return func(cfg *Config) {
 		leases.WithNodeName(nodeName)(&cfg.leases)
+	}
+}
+
+func withLeaseVNodeCount(count uint32) Option {
+	return func(cfg *Config) {
+		leases.WithVNodeCount(count)(&cfg.leases)
 	}
 }

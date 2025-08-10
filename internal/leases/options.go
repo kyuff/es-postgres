@@ -6,9 +6,10 @@ import (
 )
 
 type Config struct {
-	NodeName string
-	From     uint32
-	To       uint32
+	NodeName   string
+	From       uint32
+	To         uint32
+	VNodeCount uint32
 }
 
 type Option func(cfg *Config)
@@ -20,6 +21,14 @@ func (cfg Config) Validate() error {
 
 	if strings.TrimSpace(cfg.NodeName) == "" {
 		return fmt.Errorf("leases: node name must not be empty")
+	}
+
+	if cfg.VNodeCount == 0 {
+		return fmt.Errorf("leases: vnode count must be greater than 0")
+	}
+
+	if cfg.VNodeCount >= cfg.To-cfg.From {
+		return fmt.Errorf("leases: vnode count (%d) must be less than range size (%d - %d)", cfg.VNodeCount, cfg.From, cfg.To)
 	}
 
 	return nil
@@ -35,5 +44,11 @@ func WithRange(from, to uint32) Option {
 func WithNodeName(nodeName string) Option {
 	return func(cfg *Config) {
 		cfg.NodeName = nodeName
+	}
+}
+
+func WithVNodeCount(count uint32) Option {
+	return func(cfg *Config) {
+		cfg.VNodeCount = count
 	}
 }
