@@ -7,11 +7,11 @@ import (
 )
 
 type Config struct {
-	NodeName   string
-	From       uint32
-	To         uint32
-	VNodeCount uint32
-	Heartbeat  time.Duration
+	NodeName          string
+	From              uint32
+	To                uint32
+	VNodeCount        uint32
+	HeartbeatInterval time.Duration
 }
 
 type Option func(cfg *Config)
@@ -33,7 +33,7 @@ func (cfg Config) Validate() error {
 		return fmt.Errorf("leases: vnode count (%d) must be less than range size (%d - %d)", cfg.VNodeCount, cfg.From, cfg.To)
 	}
 
-	if cfg.Heartbeat == 0 {
+	if cfg.HeartbeatInterval == 0 {
 		return fmt.Errorf("leases: heartbeat interval must be greater than 0")
 	}
 
@@ -61,6 +61,6 @@ func WithVNodeCount(count uint32) Option {
 
 func WithHeartbeatInterval(interval time.Duration) Option {
 	return func(cfg *Config) {
-		cfg.Heartbeat = interval
+		cfg.HeartbeatInterval = interval
 	}
 }

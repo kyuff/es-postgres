@@ -3,6 +3,8 @@ package leases
 import (
 	"context"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 type ConsistentHashRing struct {
@@ -28,7 +30,11 @@ func (ring *ConsistentHashRing) Values() []uint32 {
 
 // Start is blocking and keeps the Values up to date.
 func (ring *ConsistentHashRing) Start(ctx context.Context) error {
-	var ticker = time.NewTicker(ring.cfg.Heartbeat)
+	var ticker = time.NewTicker(ring.cfg.HeartbeatInterval)
+
+	if err := ring.placeAllVNodes(ctx); err != nil {
+		return err
+	}
 
 	for {
 		select {
@@ -43,5 +49,22 @@ func (ring *ConsistentHashRing) Start(ctx context.Context) error {
 }
 
 func (ring *ConsistentHashRing) heartbeat(ctx context.Context) error {
+	return nil
+}
+
+func (ring *ConsistentHashRing) placeAllVNodes(ctx context.Context) error {
+	var g, placeCtx = errgroup.WithContext(ctx)
+
+	for range ring.cfg.VNodeCount {
+		g.Go(func() error {
+			return ring.placeVNode(placeCtx)
+		})
+	}
+
+	return g.Wait()
+}
+
+func (ring *ConsistentHashRing) placeVNode(ctx context.Context) error {
+	_ = newVNode(ring.cfg.From, ring.cfg.To)
 	return nil
 }
