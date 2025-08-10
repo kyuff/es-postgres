@@ -14,6 +14,10 @@ type Config struct {
 	HeartbeatInterval time.Duration
 }
 
+func (cfg Config) rangeLen() uint32 {
+	return cfg.To - cfg.From
+}
+
 type Option func(cfg *Config)
 
 func (cfg Config) Validate() error {
@@ -29,7 +33,7 @@ func (cfg Config) Validate() error {
 		return fmt.Errorf("leases: vnode count must be greater than 0")
 	}
 
-	if cfg.VNodeCount >= cfg.To-cfg.From {
+	if cfg.VNodeCount >= cfg.rangeLen() {
 		return fmt.Errorf("leases: vnode count (%d) must be less than range size (%d - %d)", cfg.VNodeCount, cfg.From, cfg.To)
 	}
 
