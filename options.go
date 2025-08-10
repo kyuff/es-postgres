@@ -223,7 +223,10 @@ func WithReconcilePublishing(enabled bool) Option {
 // withLeaseRange sets the range of leases used by the consistent hashing mechanism.
 func withLeaseRange(from, to uint32) Option {
 	return func(cfg *Config) {
-		leases.WithRange(from, to)(&cfg.leases)
+		leases.WithRange(leases.Range{
+			From: from,
+			To:   to,
+		})(&cfg.leases)
 	}
 }
 

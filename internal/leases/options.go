@@ -8,21 +8,16 @@ import (
 
 type Config struct {
 	NodeName          string
-	From              uint32
-	To                uint32
+	Range             Range
 	VNodeCount        uint32
 	HeartbeatInterval time.Duration
-}
-
-func (cfg Config) rangeLen() uint32 {
-	return cfg.To - cfg.From
 }
 
 type Option func(cfg *Config)
 
 func (cfg Config) Validate() error {
-	if cfg.From >= cfg.To {
-		return fmt.Errorf("leases: from (%d) must be less than to (%d)", cfg.From, cfg.To)
+	if !cfg.Range.Valid() {
+		return fmt.Errorf("leases: invalid range: %s", cfg.Range)
 	}
 
 	if strings.TrimSpace(cfg.NodeName) == "" {
@@ -33,8 +28,8 @@ func (cfg Config) Validate() error {
 		return fmt.Errorf("leases: vnode count must be greater than 0")
 	}
 
-	if cfg.VNodeCount >= cfg.rangeLen() {
-		return fmt.Errorf("leases: vnode count (%d) must be less than range size (%d - %d)", cfg.VNodeCount, cfg.From, cfg.To)
+	if cfg.VNodeCount >= cfg.Range.Len() {
+		return fmt.Errorf("leases: vnode count (%d) must be less than range size (%s)", cfg.VNodeCount, cfg.Range)
 	}
 
 	if cfg.HeartbeatInterval == 0 {
@@ -44,10 +39,9 @@ func (cfg Config) Validate() error {
 	return nil
 }
 
-func WithRange(from, to uint32) Option {
+func WithRange(r Range) Option {
 	return func(cfg *Config) {
-		cfg.From = from
-		cfg.To = to
+		cfg.Range = r
 	}
 }
 

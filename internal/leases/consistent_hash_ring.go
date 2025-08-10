@@ -13,14 +13,9 @@ type ConsistentHashRing struct {
 }
 
 func NewConsistentHashRing(cfg Config) *ConsistentHashRing {
-	values := make([]uint32, cfg.To-cfg.From)
-	for i := range cfg.To - cfg.From {
-		values[i] = cfg.From + uint32(i)
-	}
-
 	return &ConsistentHashRing{
 		cfg:    cfg,
-		values: values,
+		values: cfg.Range.Values(),
 	}
 }
 
@@ -65,6 +60,5 @@ func (ring *ConsistentHashRing) placeAllVNodes(ctx context.Context) error {
 }
 
 func (ring *ConsistentHashRing) placeVNode(ctx context.Context) error {
-	_ = newVNode(ring.cfg.From, ring.cfg.To)
 	return nil
 }
