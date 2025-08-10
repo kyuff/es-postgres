@@ -47,6 +47,7 @@ func defaultOptions() *Config {
 		WithReconcilePublishing(true),
 		WithFNVPartitioner(defaultPartitionCount),
 		withLeaseRange(0, defaultPartitionCount),
+		withLeaseNodeName(hash.RandomString(12)),
 	)
 
 }
@@ -221,5 +222,11 @@ func WithReconcilePublishing(enabled bool) Option {
 func withLeaseRange(from, to uint32) Option {
 	return func(cfg *Config) {
 		leases.WithRange(from, to)(&cfg.leases)
+	}
+}
+
+func withLeaseNodeName(nodeName string) Option {
+	return func(cfg *Config) {
+		leases.WithNodeName(nodeName)(&cfg.leases)
 	}
 }
