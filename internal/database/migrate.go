@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+
+	"github.com/kyuff/es-postgres/internal/dbtx"
 )
 
 //go:embed migrations/*.tmpl
 var migrations embed.FS
 
-func Migrate(ctx context.Context, db DBTX, schema *Schema) error {
+func Migrate(ctx context.Context, db dbtx.DBTX, schema *Schema) error {
 	migrations, err := parseSteps(migrations, schema.Prefix)
 	if err != nil {
 		return err

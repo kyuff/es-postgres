@@ -5,11 +5,13 @@ package reconcilers_test
 
 import (
 	"context"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/kyuff/es-postgres/internal/database"
-	"github.com/kyuff/es-postgres/internal/reconcilers"
 	"sync"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/kyuff/es-postgres/internal/database"
+	"github.com/kyuff/es-postgres/internal/dbtx"
+	"github.com/kyuff/es-postgres/internal/reconcilers"
 )
 
 // Ensure, that ValuerMock does implement reconcilers.Valuer.
@@ -158,7 +160,7 @@ var _ reconcilers.Schema = &SchemaMock{}
 //	}
 type SchemaMock struct {
 	// SelectOutboxStreamIDsFunc mocks the SelectOutboxStreamIDs method.
-	SelectOutboxStreamIDsFunc func(ctx context.Context, db database.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]database.Stream, error)
+	SelectOutboxStreamIDsFunc func(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]database.Stream, error)
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -167,7 +169,7 @@ type SchemaMock struct {
 			// Ctx is the ctx argument value.
 			Ctx context.Context
 			// Db is the db argument value.
-			Db database.DBTX
+			Db dbtx.DBTX
 			// GraceWindow is the graceWindow argument value.
 			GraceWindow time.Duration
 			// Partitions is the partitions argument value.
@@ -182,13 +184,13 @@ type SchemaMock struct {
 }
 
 // SelectOutboxStreamIDs calls SelectOutboxStreamIDsFunc.
-func (mock *SchemaMock) SelectOutboxStreamIDs(ctx context.Context, db database.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]database.Stream, error) {
+func (mock *SchemaMock) SelectOutboxStreamIDs(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]database.Stream, error) {
 	if mock.SelectOutboxStreamIDsFunc == nil {
 		panic("SchemaMock.SelectOutboxStreamIDsFunc: method is nil but Schema.SelectOutboxStreamIDs was just called")
 	}
 	callInfo := struct {
 		Ctx         context.Context
-		Db          database.DBTX
+		Db          dbtx.DBTX
 		GraceWindow time.Duration
 		Partitions  []uint32
 		Token       string
@@ -213,7 +215,7 @@ func (mock *SchemaMock) SelectOutboxStreamIDs(ctx context.Context, db database.D
 //	len(mockedSchema.SelectOutboxStreamIDsCalls())
 func (mock *SchemaMock) SelectOutboxStreamIDsCalls() []struct {
 	Ctx         context.Context
-	Db          database.DBTX
+	Db          dbtx.DBTX
 	GraceWindow time.Duration
 	Partitions  []uint32
 	Token       string
@@ -221,7 +223,7 @@ func (mock *SchemaMock) SelectOutboxStreamIDsCalls() []struct {
 } {
 	var calls []struct {
 		Ctx         context.Context
-		Db          database.DBTX
+		Db          dbtx.DBTX
 		GraceWindow time.Duration
 		Partitions  []uint32
 		Token       string

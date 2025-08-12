@@ -30,7 +30,7 @@ type Config struct {
 	reconcileTimeout    time.Duration
 	processTimeout      time.Duration
 	processBackoff      func(streamType string, retryCount int64) time.Duration
-	leases              leases.Config
+	leasesOptions       []leases.Option
 }
 
 func defaultOptions() *Config {
@@ -47,9 +47,6 @@ func defaultOptions() *Config {
 		WithReconcilePublishing(true),
 		WithFNVPartitioner(defaultPartitionCount),
 		withLeaseRange(0, defaultPartitionCount),
-		withLeaseNodeName(hash.RandomString(12)),
-		withLeaseVNodeCount(5),
-		withLeaseHeartbeatInterval(2*time.Second),
 	)
 
 }
@@ -83,10 +80,6 @@ func (c *Config) validate() error {
 
 	if c.processBackoff == nil {
 		return errors.New("missing process backoff")
-	}
-
-	if err := c.leases.Validate(); err != nil {
-		return err
 	}
 
 	return nil
@@ -220,30 +213,28 @@ func WithReconcilePublishing(enabled bool) Option {
 	}
 }
 
+func withLeaseOption(opt leases.Option) Option {
+	return func(cfg *Config) {
+		cfg.leasesOptions = append(cfg.leasesOptions, opt)
+	}
+}
+
 // withLeaseRange sets the range of leases used by the consistent hashing mechanism.
 func withLeaseRange(from, to uint32) Option {
-	return func(cfg *Config) {
-		leases.WithRange(leases.Range{
-			From: from,
-			To:   to,
-		})(&cfg.leases)
-	}
+	return withLeaseOption(leases.WithRange(leases.Range{
+		From: from,
+		To:   to,
+	}))
 }
 
 func withLeaseNodeName(nodeName string) Option {
-	return func(cfg *Config) {
-		leases.WithNodeName(nodeName)(&cfg.leases)
-	}
+	return withLeaseOption(leases.WithNodeName(nodeName))
 }
 
 func withLeaseVNodeCount(count uint32) Option {
-	return func(cfg *Config) {
-		leases.WithVNodeCount(count)(&cfg.leases)
-	}
+	return withLeaseOption(leases.WithVNodeCount(count))
 }
 
 func withLeaseHeartbeatInterval(interval time.Duration) Option {
-	return func(cfg *Config) {
-		leases.WithHeartbeatInterval(interval)(&cfg.leases)
-	}
+	return withLeaseOption(leases.WithHeartbeatInterval(interval))
 }

@@ -8,6 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/kyuff/es"
+	"github.com/kyuff/es-postgres/internal/dbtx"
+	"github.com/kyuff/es-postgres/internal/leases"
 	"github.com/kyuff/es-postgres/internal/uuid"
 )
 
@@ -69,7 +71,7 @@ FROM {{ .Prefix }}_migrations;
 `
 }
 
-func (s *Schema) SelectCurrentMigration(ctx context.Context, db DBTX) (uint32, error) {
+func (s *Schema) SelectCurrentMigration(ctx context.Context, db dbtx.DBTX) (uint32, error) {
 	row := db.QueryRow(ctx, sql.selectCurrentMigration)
 	var current uint32
 	err := row.Scan(&current)
@@ -84,7 +86,7 @@ func init() {
 	sql.advisoryLock = "SELECT pg_advisory_lock($1);"
 }
 
-func (s *Schema) AdvisoryLock(ctx context.Context, db DBTX, pid int) error {
+func (s *Schema) AdvisoryLock(ctx context.Context, db dbtx.DBTX, pid int) error {
 	_, err := db.Exec(ctx, sql.advisoryLock, pid)
 	if err != nil {
 		return fmt.Errorf("advisory lock %d failed: %w", pid, err)
@@ -97,7 +99,7 @@ func init() {
 	sql.advisoryUnlock = "SELECT pg_advisory_unlock($1);"
 }
 
-func (s *Schema) AdvisoryUnlock(ctx context.Context, db DBTX, pid int) error {
+func (s *Schema) AdvisoryUnlock(ctx context.Context, db dbtx.DBTX, pid int) error {
 	_, err := db.Exec(ctx, sql.advisoryUnlock, pid)
 	if err != nil {
 		return fmt.Errorf("advisory unlock %d failed: %w", pid, err)
@@ -119,7 +121,7 @@ CREATE TABLE IF NOT EXISTS {{ .Prefix }}_migrations
 `
 }
 
-func (s *Schema) CreateMigrationTable(ctx context.Context, db DBTX) error {
+func (s *Schema) CreateMigrationTable(ctx context.Context, db dbtx.DBTX) error {
 	_, err := db.Exec(ctx, sql.createMigrationTable)
 	if err != nil {
 		return fmt.Errorf("create migration Table failed: %w", err)
@@ -136,7 +138,7 @@ ON CONFLICT DO NOTHING;
 `
 }
 
-func (s *Schema) InsertMigrationRow(ctx context.Context, db DBTX, version uint32, name string, hash string) error {
+func (s *Schema) InsertMigrationRow(ctx context.Context, db dbtx.DBTX, version uint32, name string, hash string) error {
 	_, err := db.Exec(ctx, sql.insertMigrationRow, version, name, hash)
 	if err != nil {
 		return fmt.Errorf("insert Migration row failed: %w", err)
@@ -165,7 +167,7 @@ ORDER BY event_number ASC
 `
 }
 
-func (s *Schema) SelectEvents(ctx context.Context, db DBTX, streamType string, streamID string, eventNumber int64) (pgx.Rows, error) {
+func (s *Schema) SelectEvents(ctx context.Context, db dbtx.DBTX, streamType string, streamID string, eventNumber int64) (pgx.Rows, error) {
 	return db.Query(ctx, sql.selectEvents, streamType, streamID, eventNumber)
 }
 
@@ -184,7 +186,7 @@ INSERT INTO {{ .Prefix }}_events (
                             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9);`
 }
 
-func (s *Schema) WriteEvent(ctx context.Context, db DBTX, event es.Event, content []byte, metadata []byte) error {
+func (s *Schema) WriteEvent(ctx context.Context, db dbtx.DBTX, event es.Event, content []byte, metadata []byte) error {
 	_, err := db.Exec(ctx, sql.writeEvent,
 		event.StreamType,
 		event.StreamID,
@@ -212,7 +214,7 @@ INSERT INTO {{ .Prefix }}_outbox (
 `
 }
 
-func (s *Schema) InsertOutbox(ctx context.Context, tx DBTX, streamType, streamID, storeStreamID string, eventNumber, watermark int64, partition uint32) (int64, error) {
+func (s *Schema) InsertOutbox(ctx context.Context, tx dbtx.DBTX, streamType, streamID, storeStreamID string, eventNumber, watermark int64, partition uint32) (int64, error) {
 	affected, err := tx.Exec(ctx, sql.insertOutbox,
 		streamType,
 		streamID,
@@ -238,7 +240,7 @@ WHERE stream_type = $1
 `
 }
 
-func (s *Schema) UpdateOutbox(ctx context.Context, tx DBTX, streamType, streamID string, eventNumber, lastEventNumber int64) (int64, error) {
+func (s *Schema) UpdateOutbox(ctx context.Context, tx dbtx.DBTX, streamType, streamID string, eventNumber, lastEventNumber int64) (int64, error) {
 	affected, err := tx.Exec(ctx, sql.updateOutbox, streamType, streamID, eventNumber, lastEventNumber)
 	if err != nil {
 		return 0, err
@@ -257,7 +259,7 @@ ORDER BY store_stream_id ASC
 LIMIT $3;`
 }
 
-func (s *Schema) SelectStreamIDs(ctx context.Context, db DBTX, streamType string, token string, limit int64) ([]string, string, error) {
+func (s *Schema) SelectStreamIDs(ctx context.Context, db dbtx.DBTX, streamType string, token string, limit int64) ([]string, string, error) {
 	if token == "" {
 		token = uuid.Empty
 	}
@@ -300,7 +302,7 @@ LIMIT $4
 `
 }
 
-func (s *Schema) SelectOutboxStreamIDs(ctx context.Context, db DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]Stream, error) {
+func (s *Schema) SelectOutboxStreamIDs(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]Stream, error) {
 	if token == "" {
 		token = uuid.Empty
 	}
@@ -341,7 +343,7 @@ WHERE
 AND store_stream_id = $2;
 `
 }
-func (s *Schema) SelectOutboxWatermark(ctx context.Context, db DBTX, stream Stream) (OutboxWatermark, int64, error) {
+func (s *Schema) SelectOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream Stream) (OutboxWatermark, int64, error) {
 	var (
 		row         = db.QueryRow(ctx, sql.selectOutboxWatermark, stream.Type, stream.StoreID)
 		w           OutboxWatermark
@@ -363,7 +365,7 @@ WHERE stream_type = $1
   AND store_stream_id = $2
 `
 }
-func (s *Schema) UpdateOutboxWatermark(ctx context.Context, db DBTX, stream Stream, delay time.Duration, watermark OutboxWatermark) error {
+func (s *Schema) UpdateOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream Stream, delay time.Duration, watermark OutboxWatermark) error {
 	tag, err := db.Exec(ctx, sql.updateOutboxWatermark,
 		stream.Type,
 		stream.StoreID,
@@ -379,4 +381,16 @@ func (s *Schema) UpdateOutboxWatermark(ctx context.Context, db DBTX, stream Stre
 		return fmt.Errorf("stream %q not watermark updated", stream.Type)
 	}
 	return err
+}
+
+func (s *Schema) SelectLeasesRing(ctx context.Context, db dbtx.DBTX) (leases.Ring, error) {
+	return nil, nil
+}
+
+func (s *Schema) ApproveLease(ctx context.Context, db dbtx.DBTX, vnodes []uint32) error {
+	return nil
+}
+
+func (s *Schema) InsertLease(ctx context.Context, db dbtx.DBTX, vnode uint32, name string, ttl time.Duration, status string) error {
+	return nil
 }

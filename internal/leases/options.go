@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/kyuff/es-postgres/internal/hash"
 )
 
 type Config struct {
@@ -13,9 +15,26 @@ type Config struct {
 	HeartbeatInterval time.Duration
 }
 
+func DefaultOptions() *Config {
+	return applyOptions(&Config{},
+		WithNodeName(hash.RandomString(12)),
+		WithVNodeCount(5),
+		WithHeartbeatInterval(2*time.Second),
+	) // add default options here
+
+}
+
 type Option func(cfg *Config)
 
-func (cfg Config) Validate() error {
+func applyOptions(options *Config, opts ...Option) *Config {
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	return options
+}
+
+func (cfg Config) validate() error {
 	if !cfg.Range.Valid() {
 		return fmt.Errorf("leases: invalid range: %s", cfg.Range)
 	}

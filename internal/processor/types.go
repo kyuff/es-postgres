@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kyuff/es"
 	"github.com/kyuff/es-postgres/internal/database"
+	"github.com/kyuff/es-postgres/internal/dbtx"
 )
 
 type Connector interface {
@@ -19,6 +20,6 @@ type Reader interface {
 }
 
 type Schema interface {
-	SelectOutboxWatermark(ctx context.Context, db database.DBTX, stream database.Stream) (database.OutboxWatermark, int64, error)
-	UpdateOutboxWatermark(ctx context.Context, db database.DBTX, stream database.Stream, delay time.Duration, watermark database.OutboxWatermark) error
+	SelectOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream database.Stream) (database.OutboxWatermark, int64, error)
+	UpdateOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream database.Stream, delay time.Duration, watermark database.OutboxWatermark) error
 }

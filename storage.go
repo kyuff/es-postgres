@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kyuff/es"
 	"github.com/kyuff/es-postgres/internal/database"
+	"github.com/kyuff/es-postgres/internal/dbtx"
 	"github.com/kyuff/es-postgres/internal/eventsio"
 	"github.com/kyuff/es-postgres/internal/leases"
 	"github.com/kyuff/es-postgres/internal/processor"
@@ -23,7 +24,7 @@ type reader interface {
 }
 
 type writer interface {
-	Write(ctx context.Context, db database.DBTX, streamType string, events iter.Seq2[es.Event, error]) error
+	Write(ctx context.Context, db dbtx.DBTX, streamType string, events iter.Seq2[es.Event, error]) error
 }
 
 func New(connector Connector, opts ...Option) (*Storage, error) {
@@ -89,7 +90,7 @@ type Storage struct {
 	cfg        *Config
 	connector  Connector
 	schema     *database.Schema
-	leases     *leases.ConsistentHashRing
+	leases     *leases.Supervisor
 	reader     reader
 	writer     writer
 	reconciles []reconcilers.Reconciler

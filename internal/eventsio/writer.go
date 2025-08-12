@@ -6,7 +6,7 @@ import (
 	"iter"
 
 	"github.com/kyuff/es"
-	"github.com/kyuff/es-postgres/internal/database"
+	"github.com/kyuff/es-postgres/internal/dbtx"
 )
 
 func NewWriter(schema Schema, validator Validator, codec Codec, partitioner func(streamType, streamID string) uint32) *Writer {
@@ -27,7 +27,7 @@ type Writer struct {
 	partitioner func(streamType, streamID string) uint32
 }
 
-func (w *Writer) Write(ctx context.Context, db database.DBTX, streamType string, events iter.Seq2[es.Event, error]) error {
+func (w *Writer) Write(ctx context.Context, db dbtx.DBTX, streamType string, events iter.Seq2[es.Event, error]) error {
 	var (
 		firstEvent es.Event
 		lastEvent  es.Event
