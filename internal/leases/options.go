@@ -2,6 +2,7 @@ package leases
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ type Config struct {
 	Range             Range
 	VNodeCount        uint32
 	HeartbeatInterval time.Duration
+	rand              *rand.Rand
 }
 
 func DefaultOptions() *Config {
@@ -20,6 +22,7 @@ func DefaultOptions() *Config {
 		WithNodeName(hash.RandomString(12)),
 		WithVNodeCount(5),
 		WithHeartbeatInterval(2*time.Second),
+		WithRand(rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))),
 	) // add default options here
 
 }
@@ -79,5 +82,11 @@ func WithVNodeCount(count uint32) Option {
 func WithHeartbeatInterval(interval time.Duration) Option {
 	return func(cfg *Config) {
 		cfg.HeartbeatInterval = interval
+	}
+}
+
+func WithRand(r *rand.Rand) Option {
+	return func(cfg *Config) {
+		cfg.rand = r
 	}
 }

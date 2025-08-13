@@ -2,6 +2,7 @@ package leases_test
 
 import (
 	"context"
+	"math/rand/v2"
 	"testing"
 	"time"
 
@@ -19,6 +20,7 @@ func TestHeartbeat(t *testing.T) {
 			testOptions := append([]leases.Option{
 				leases.WithHeartbeatInterval(10 * time.Millisecond),
 				leases.WithRange(leases.Range{From: 0, To: 100}),
+				leases.WithRand(rand.New(rand.NewPCG(1, 2))),
 			}, opts...)
 			cfg := leases.DefaultOptions()
 			for _, opt := range testOptions {
@@ -48,14 +50,16 @@ func TestHeartbeat(t *testing.T) {
 	)
 
 	var tests = []struct {
-		name             string
-		opts             []leases.Option
-		afterFirstSelect func(db dbtx.DBTX, schema *database.Schema)
-		ring             leases.Ring
-		want             leases.Ring
+		name          string
+		opts          []leases.Option
+		onFirstSelect func(db dbtx.DBTX, schema *database.Schema)
+		ring          leases.Ring
+		want          leases.Ring
+		values        []uint32
+		assert        func(t *testing.T, schema *SchemaMock)
 	}{
 		{
-			name: "test",
+			name: "keep a single node ring stable",
 			opts: []leases.Option{
 				leases.WithNodeName("node1"),
 				leases.WithVNodeCount(2),
@@ -68,6 +72,35 @@ func TestHeartbeat(t *testing.T) {
 			want: leases.Ring{
 				{VNode: 3, NodeName: "node1", Valid: true, Status: leases.Leased},
 				{VNode: 7, NodeName: "node1", Valid: true, Status: leases.Leased},
+			},
+			values: leases.Range{From: 0, To: 10}.Values(),
+			assert: func(t *testing.T, schema *SchemaMock) {
+				assert.Equal(t, 1, len(schema.SelectLeasesCalls()))
+				assert.Equal(t, 0, len(schema.ApproveLeaseCalls()))
+				assert.Equal(t, 0, len(schema.InsertLeaseCalls()))
+			},
+		},
+
+		{
+			name: "approve another node",
+			opts: []leases.Option{
+				leases.WithNodeName("node1"),
+				leases.WithVNodeCount(2),
+				leases.WithRange(leases.Range{From: 0, To: 10}),
+			},
+			ring: leases.Ring{
+				{VNode: 3, NodeName: "node1", Valid: true, Status: leases.Leased},
+				{VNode: 7, NodeName: "new", Valid: true, Status: leases.Pending},
+			},
+			want: leases.Ring{
+				{VNode: 3, NodeName: "node1", Valid: true, Status: leases.Leased},
+				{VNode: 7, NodeName: "new", Valid: true, Status: leases.Leased},
+			},
+			values: leases.Range{From: 3, To: 7}.Values(),
+			assert: func(t *testing.T, schema *SchemaMock) {
+				assert.Equal(t, 1, len(schema.SelectLeasesCalls()))
+				assert.Equal(t, 1, len(schema.ApproveLeaseCalls()))
+				assert.Equal(t, 0, len(schema.InsertLeaseCalls()))
 			},
 		},
 	}
@@ -83,8 +116,8 @@ func TestHeartbeat(t *testing.T) {
 			}
 			schemaMock.SelectLeasesFunc = func(ctx context.Context, db dbtx.DBTX) (leases.Ring, error) {
 				ring, err := schema.SelectLeases(ctx, db)
-				if len(schemaMock.SelectLeasesCalls()) == 1 && tt.afterFirstSelect != nil {
-					tt.afterFirstSelect(db, schema)
+				if len(schemaMock.SelectLeasesCalls()) == 1 && tt.onFirstSelect != nil {
+					tt.onFirstSelect(db, schema)
 				}
 
 				return ring, err
@@ -113,6 +146,10 @@ func TestHeartbeat(t *testing.T) {
 				t.FailNow()
 			}
 			assert.EqualSlice(t, tt.want, got)
+			if !assert.EqualSlice(t, tt.values, sut.Values()) {
+				t.Logf("got : %v", sut.Values())
+				t.Logf("want: %v", tt.values)
+			}
 		})
 	}
 }

@@ -3,14 +3,7 @@ package leases
 import (
 	"fmt"
 	"math/rand/v2"
-	"time"
 )
-
-var ran *rand.Rand
-
-func init() {
-	ran = rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 0))
-}
 
 type Range struct {
 	From uint32
@@ -29,7 +22,7 @@ func (r Range) String() string {
 	return fmt.Sprintf("%d-%d", r.From, r.To)
 }
 
-func (r Range) VNode() uint32 {
+func (r Range) VNode(ran *rand.Rand) uint32 {
 	return ran.Uint32N(r.To-r.From) + r.From
 }
 

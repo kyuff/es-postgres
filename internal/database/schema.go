@@ -32,6 +32,7 @@ type sqlQueries struct {
 	selectOutboxWatermark  string
 	updateOutboxWatermark  string
 	selectLeases           string
+	approveLease           string
 	insertLease            string
 }
 
@@ -53,6 +54,7 @@ func NewSchema(prefix string) (*Schema, error) {
 			&sql.selectOutboxWatermark,
 			&sql.updateOutboxWatermark,
 			&sql.selectLeases,
+			&sql.approveLease,
 			&sql.insertLease,
 		)
 	})
@@ -420,7 +422,26 @@ func (s *Schema) SelectLeases(ctx context.Context, db dbtx.DBTX) (leases.Ring, e
 	return ring, nil
 }
 
+func init() {
+	sql.approveLease = `
+UPDATE {{ .Prefix }}_leases
+SET
+  status = $2
+WHERE
+  vnode = ANY ($1);
+`
+}
+
 func (s *Schema) ApproveLease(ctx context.Context, db dbtx.DBTX, vnodes []uint32) error {
+	tag, err := db.Exec(ctx, sql.approveLease, vnodes, leases.Leased)
+	if err != nil {
+		return err
+	}
+
+	if len(vnodes) != int(tag.RowsAffected()) {
+		return fmt.Errorf("leases approval mismatch: %d != %d", len(vnodes), tag.RowsAffected())
+	}
+
 	return nil
 }
 
