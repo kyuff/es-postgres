@@ -20,7 +20,7 @@ type Heartbeat struct {
 }
 
 func (h *Heartbeat) Heartbeat(ctx context.Context, db dbtx.DBTX) error {
-	ring, err := h.schema.SelectLeasesRing(ctx, db)
+	ring, err := h.schema.SelectLeases(ctx, db)
 	if err != nil {
 		return err
 	}

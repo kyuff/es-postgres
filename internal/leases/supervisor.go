@@ -9,7 +9,7 @@ import (
 )
 
 type Schema interface {
-	SelectLeasesRing(ctx context.Context, db dbtx.DBTX) (Ring, error)
+	SelectLeases(ctx context.Context, db dbtx.DBTX) (Ring, error)
 	ApproveLease(ctx context.Context, db dbtx.DBTX, vnodes []uint32) error
 	InsertLease(ctx context.Context, db dbtx.DBTX, vnode uint32, name string, ttl time.Duration, status string) error
 }

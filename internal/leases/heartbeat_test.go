@@ -1,12 +1,14 @@
 package leases_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kyuff/es-postgres/internal/assert"
 	"github.com/kyuff/es-postgres/internal/database"
+	"github.com/kyuff/es-postgres/internal/dbtx"
 	"github.com/kyuff/es-postgres/internal/leases"
 )
 
@@ -46,22 +48,26 @@ func TestHeartbeat(t *testing.T) {
 	)
 
 	var tests = []struct {
-		name   string
-		opts   []leases.Option
-		schema leases.Schema
-		ring   leases.Ring
-		want   leases.Ring
+		name             string
+		opts             []leases.Option
+		afterFirstSelect func(db dbtx.DBTX, schema *database.Schema)
+		ring             leases.Ring
+		want             leases.Ring
 	}{
 		{
 			name: "test",
 			opts: []leases.Option{
 				leases.WithNodeName("node1"),
+				leases.WithVNodeCount(2),
+				leases.WithRange(leases.Range{From: 0, To: 10}),
 			},
 			ring: leases.Ring{
-				{VNode: 0, NodeName: "node1", Valid: true, Status: leases.Leased},
+				{VNode: 3, NodeName: "node1", Valid: true, Status: leases.Leased},
+				{VNode: 7, NodeName: "node1", Valid: true, Status: leases.Leased},
 			},
 			want: leases.Ring{
-				{VNode: 0, NodeName: "node1", Valid: true, Status: leases.Leased},
+				{VNode: 3, NodeName: "node1", Valid: true, Status: leases.Leased},
+				{VNode: 7, NodeName: "node1", Valid: true, Status: leases.Leased},
 			},
 		},
 	}
@@ -71,6 +77,19 @@ func TestHeartbeat(t *testing.T) {
 			t.Parallel()
 			// arrange
 			var db, schema = newSchema(t)
+			var schemaMock = &SchemaMock{
+				ApproveLeaseFunc: schema.ApproveLease,
+				InsertLeaseFunc:  schema.InsertLease,
+			}
+			schemaMock.SelectLeasesFunc = func(ctx context.Context, db dbtx.DBTX) (leases.Ring, error) {
+				ring, err := schema.SelectLeases(ctx, db)
+				if len(schemaMock.SelectLeasesCalls()) == 1 && tt.afterFirstSelect != nil {
+					tt.afterFirstSelect(db, schema)
+				}
+
+				return ring, err
+
+			}
 			var sut = newSUT(t, schema, tt.opts...)
 
 			for _, info := range tt.ring {
@@ -89,7 +108,7 @@ func TestHeartbeat(t *testing.T) {
 
 			// assert
 			assert.NoError(t, err)
-			got, err := schema.SelectLeasesRing(t.Context(), db)
+			got, err := schema.SelectLeases(t.Context(), db)
 			if !assert.NoError(t, err) {
 				t.FailNow()
 			}

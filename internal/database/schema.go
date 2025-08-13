@@ -10,6 +10,7 @@ import (
 	"github.com/kyuff/es"
 	"github.com/kyuff/es-postgres/internal/dbtx"
 	"github.com/kyuff/es-postgres/internal/leases"
+	"github.com/kyuff/es-postgres/internal/rfc8601"
 	"github.com/kyuff/es-postgres/internal/uuid"
 )
 
@@ -30,6 +31,8 @@ type sqlQueries struct {
 	selectOutboxStreamIDs  string
 	selectOutboxWatermark  string
 	updateOutboxWatermark  string
+	selectLeases           string
+	insertLease            string
 }
 
 func NewSchema(prefix string) (*Schema, error) {
@@ -49,6 +52,8 @@ func NewSchema(prefix string) (*Schema, error) {
 			&sql.selectOutboxStreamIDs,
 			&sql.selectOutboxWatermark,
 			&sql.updateOutboxWatermark,
+			&sql.selectLeases,
+			&sql.insertLease,
 		)
 	})
 	if err != nil {
@@ -383,14 +388,50 @@ func (s *Schema) UpdateOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream
 	return err
 }
 
-func (s *Schema) SelectLeasesRing(ctx context.Context, db dbtx.DBTX) (leases.Ring, error) {
-	return nil, nil
+func init() {
+	sql.selectLeases = `
+SELECT vnode, node_name, ttl > NOW(), status
+FROM {{ .Prefix }}_leases;
+`
+}
+
+func (s *Schema) SelectLeases(ctx context.Context, db dbtx.DBTX) (leases.Ring, error) {
+	rows, err := db.Query(ctx, sql.selectLeases)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ring leases.Ring
+	for rows.Next() {
+		var info leases.Info
+		err = rows.Scan(
+			&info.VNode,
+			&info.NodeName,
+			&info.Valid,
+			&info.Status,
+		)
+		if err != nil {
+			return nil, err
+		}
+		ring = append(ring, info)
+	}
+
+	return ring, nil
 }
 
 func (s *Schema) ApproveLease(ctx context.Context, db dbtx.DBTX, vnodes []uint32) error {
 	return nil
 }
 
+func init() {
+	sql.insertLease = `
+INSERT INTO {{ .Prefix }}_leases
+(vnode, node_name, ttl, status)
+VALUES ($1, $2, NOW() + $3::interval, $4);
+`
+}
 func (s *Schema) InsertLease(ctx context.Context, db dbtx.DBTX, vnode uint32, name string, ttl time.Duration, status string) error {
-	return nil
+	_, err := db.Exec(ctx, sql.insertLease, vnode, name, rfc8601.Format(ttl), status)
+	return err
 }
