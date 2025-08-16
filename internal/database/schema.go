@@ -393,7 +393,8 @@ func (s *Schema) UpdateOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream
 func init() {
 	sql.selectLeases = `
 SELECT vnode, node_name, ttl > NOW(), status
-FROM {{ .Prefix }}_leases;
+FROM {{ .Prefix }}_leases
+ORDER BY vnode ASC;
 `
 }
 

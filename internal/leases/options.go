@@ -14,7 +14,8 @@ type Config struct {
 	Range             Range
 	VNodeCount        uint32
 	HeartbeatInterval time.Duration
-	rand              *rand.Rand
+	LeaseTTL          time.Duration
+	Rand              *rand.Rand
 }
 
 func DefaultOptions() *Config {
@@ -22,6 +23,7 @@ func DefaultOptions() *Config {
 		WithNodeName(hash.RandomString(12)),
 		WithVNodeCount(5),
 		WithHeartbeatInterval(2*time.Second),
+		WithLeaseTTL(3*time.Second),
 		WithRand(rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))),
 	) // add default options here
 
@@ -87,6 +89,12 @@ func WithHeartbeatInterval(interval time.Duration) Option {
 
 func WithRand(r *rand.Rand) Option {
 	return func(cfg *Config) {
-		cfg.rand = r
+		cfg.Rand = r
+	}
+}
+
+func WithLeaseTTL(ttl time.Duration) Option {
+	return func(cfg *Config) {
+		cfg.LeaseTTL = ttl
 	}
 }

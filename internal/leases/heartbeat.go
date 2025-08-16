@@ -3,6 +3,7 @@ package leases
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/kyuff/es-postgres/internal/dbtx"
@@ -30,6 +31,7 @@ func (h *Heartbeat) Heartbeat(ctx context.Context, db dbtx.DBTX) error {
 	}
 
 	report := ring.Analyze(h.cfg.NodeName, h.cfg.Range, h.cfg.VNodeCount)
+
 	return errors.Join(
 		h.approveLeases(ctx, db, report.Approve),
 		h.placeVNodes(ctx, db, report.MissingCount, report.BlockedVNodes),
@@ -64,7 +66,30 @@ func (h *Heartbeat) placeVNodes(ctx context.Context, db dbtx.DBTX, missing uint3
 }
 
 func (h *Heartbeat) placeVNode(ctx context.Context, db dbtx.DBTX, blocked map[uint32]struct{}) (uint32, error) {
-	return 0, nil
+	vnode, err := h.findVNode(blocked)
+	if err != nil {
+		return 0, err
+	}
+
+	err = h.schema.InsertLease(ctx, db, vnode, h.cfg.NodeName, h.cfg.LeaseTTL, Pending.String())
+	if err != nil {
+		return 0, err
+	}
+
+	return vnode, nil
+}
+
+func (h *Heartbeat) findVNode(blocked map[uint32]struct{}) (uint32, error) {
+	if len(blocked) >= int(h.cfg.Range.Len()) {
+		return 0, fmt.Errorf("no vnodes available")
+	}
+
+	for {
+		vnode := h.cfg.Range.VNode(h.cfg.Rand)
+		if _, cannotUse := blocked[vnode]; !cannotUse {
+			return vnode, nil
+		}
+	}
 }
 
 func (h *Heartbeat) updateTTL(ctx context.Context, db dbtx.DBTX) error {

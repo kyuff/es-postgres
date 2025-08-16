@@ -85,7 +85,7 @@ func TestHeartbeat(t *testing.T) {
 			name: "approve another node",
 			opts: []leases.Option{
 				leases.WithNodeName("node1"),
-				leases.WithVNodeCount(2),
+				leases.WithVNodeCount(1),
 				leases.WithRange(leases.Range{From: 0, To: 10}),
 			},
 			ring: leases.Ring{
@@ -101,6 +101,55 @@ func TestHeartbeat(t *testing.T) {
 				assert.Equal(t, 1, len(schema.SelectLeasesCalls()))
 				assert.Equal(t, 1, len(schema.ApproveLeaseCalls()))
 				assert.Equal(t, 0, len(schema.InsertLeaseCalls()))
+			},
+		},
+
+		{
+			name: "approve own node",
+			opts: []leases.Option{
+				leases.WithNodeName("node1"),
+				leases.WithVNodeCount(3),
+				leases.WithRange(leases.Range{From: 0, To: 10}),
+			},
+			ring: leases.Ring{
+				{VNode: 3, NodeName: "node1", Valid: true, Status: leases.Leased},
+				{VNode: 6, NodeName: "node1", Valid: true, Status: leases.Pending},
+				{VNode: 7, NodeName: "node1", Valid: true, Status: leases.Leased},
+			},
+			want: leases.Ring{
+				{VNode: 3, NodeName: "node1", Valid: true, Status: leases.Leased},
+				{VNode: 6, NodeName: "node1", Valid: true, Status: leases.Leased},
+				{VNode: 7, NodeName: "node1", Valid: true, Status: leases.Leased},
+			},
+			values: leases.Range{From: 0, To: 10}.Values(),
+			assert: func(t *testing.T, schema *SchemaMock) {
+				assert.Equalf(t, 1, len(schema.SelectLeasesCalls()), "SelectLeases")
+				assert.Equalf(t, 1, len(schema.ApproveLeaseCalls()), "ApproveLease")
+				assert.Equalf(t, 0, len(schema.InsertLeaseCalls()), "InsertLease")
+			},
+		},
+
+		{
+			name: "lease another node",
+			opts: []leases.Option{
+				leases.WithNodeName("node1"),
+				leases.WithVNodeCount(3),
+				leases.WithRange(leases.Range{From: 0, To: 10}),
+			},
+			ring: leases.Ring{
+				{VNode: 3, NodeName: "node1", Valid: true, Status: leases.Leased},
+				{VNode: 7, NodeName: "node1", Valid: true, Status: leases.Leased},
+			},
+			want: leases.Ring{
+				{VNode: 3, NodeName: "node1", Valid: true, Status: leases.Leased},
+				{VNode: 6, NodeName: "node1", Valid: true, Status: leases.Pending},
+				{VNode: 7, NodeName: "node1", Valid: true, Status: leases.Leased},
+			},
+			values: leases.Range{From: 0, To: 10}.Values(),
+			assert: func(t *testing.T, schema *SchemaMock) {
+				assert.Equal(t, 1, len(schema.SelectLeasesCalls()))
+				assert.Equal(t, 0, len(schema.ApproveLeaseCalls()))
+				assert.Equal(t, 1, len(schema.InsertLeaseCalls()))
 			},
 		},
 	}
@@ -123,7 +172,7 @@ func TestHeartbeat(t *testing.T) {
 				return ring, err
 
 			}
-			var sut = newSUT(t, schema, tt.opts...)
+			var sut = newSUT(t, schemaMock, tt.opts...)
 
 			for _, info := range tt.ring {
 				ttl := time.Duration(0)
@@ -150,6 +199,7 @@ func TestHeartbeat(t *testing.T) {
 				t.Logf("got : %v", sut.Values())
 				t.Logf("want: %v", tt.values)
 			}
+			tt.assert(t, schemaMock)
 		})
 	}
 }

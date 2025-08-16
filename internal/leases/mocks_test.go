@@ -67,7 +67,7 @@ type SchemaMock struct {
 			Vnode uint32
 			// Name is the name argument value.
 			Name string
-			// TTL is the ttl argument value.
+			// LeaseTTL is the ttl argument value.
 			TTL time.Duration
 			// Status is the status argument value.
 			Status string

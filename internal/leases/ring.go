@@ -62,8 +62,15 @@ func (ring Ring) Analyze(name string, full Range, count uint32) Report {
 
 	for _, info := range ring {
 		blocked[info.VNode] = struct{}{}
+		if lastOwned != nil {
+			if info.Status == Pending {
+				approve = append(approve, info)
+			}
+		}
+
 		if name == info.NodeName {
 			seen++
+
 			if lastOwned == nil {
 				lastOwned = &info
 				continue
@@ -76,10 +83,6 @@ func (ring Ring) Analyze(name string, full Range, count uint32) Report {
 
 			lastOwned = &info
 		} else {
-			if info.Status == Pending {
-				approve = append(approve, info)
-			}
-
 			if lastOwned != nil {
 				values = append(values, Range{
 					From: lastOwned.VNode,
