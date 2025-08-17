@@ -59,9 +59,10 @@ func New(connector Connector, opts ...Option) (*Storage, error) {
 		return nil, err
 	}
 
-	var (
-		valuer = leases.NewConsistentHashRing(cfg.leases)
-	)
+	valuer, err := leases.NewSupervisor(schema, cfg.leasesOptions...)
+	if err != nil {
+		return nil, err
+	}
 
 	return &Storage{
 		cfg:       cfg,
