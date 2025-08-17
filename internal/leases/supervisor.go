@@ -2,11 +2,13 @@ package leases
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kyuff/es-postgres/internal/dbtx"
+	"github.com/kyuff/es-postgres/internal/retry"
 )
 
 type Connector interface {
@@ -38,11 +40,15 @@ func NewSupervisor(connector Connector, schema Schema, opts ...Option) (*Supervi
 		return nil, err
 	}
 
+	return New(cfg, NewHeartbeat(cfg, schema), connector), nil
+}
+
+func New(cfg *Config, heartbeat Heartbeater, connector Connector) *Supervisor {
 	return &Supervisor{
 		cfg:       cfg,
-		heartbeat: NewHeartbeat(cfg, schema),
+		heartbeat: heartbeat,
 		connector: connector,
-	}, nil
+	}
 }
 
 func (s *Supervisor) Values() []uint32 {
@@ -54,23 +60,12 @@ func (s *Supervisor) Values() []uint32 {
 
 // Start is blocking and keeps the Values up to date.
 func (s *Supervisor) Start(ctx context.Context) error {
-	var ticker = time.NewTicker(s.cfg.HeartbeatInterval)
-
-	err := s.tick(ctx)
+	err := retry.Continue(ctx, s.cfg.HeartbeatInterval, 10, s.tick)
 	if err != nil {
-		return err
+		return fmt.Errorf("supervisor failed: %w", err)
 	}
 
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			if err := s.tick(ctx); err != nil {
-				return err
-			}
-		}
-	}
+	return nil
 }
 
 func (s *Supervisor) tick(ctx context.Context) error {

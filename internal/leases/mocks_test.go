@@ -5,6 +5,7 @@ package leases_test
 
 import (
 	"context"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kyuff/es-postgres/internal/dbtx"
 	"github.com/kyuff/es-postgres/internal/leases"
 	"sync"
@@ -222,5 +223,143 @@ func (mock *SchemaMock) RefreshLeasesCalls() []struct {
 	mock.lockRefreshLeases.RLock()
 	calls = mock.calls.RefreshLeases
 	mock.lockRefreshLeases.RUnlock()
+	return calls
+}
+
+// Ensure, that HeartbeaterMock does implement leases.Heartbeater.
+// If this is not the case, regenerate this file with moq.
+var _ leases.Heartbeater = &HeartbeaterMock{}
+
+// HeartbeaterMock is a mock implementation of leases.Heartbeater.
+//
+//	func TestSomethingThatUsesHeartbeater(t *testing.T) {
+//
+//		// make and configure a mocked leases.Heartbeater
+//		mockedHeartbeater := &HeartbeaterMock{
+//			HeartbeatFunc: func(ctx context.Context, conn dbtx.DBTX) ([]uint32, error) {
+//				panic("mock out the Heartbeat method")
+//			},
+//		}
+//
+//		// use mockedHeartbeater in code that requires leases.Heartbeater
+//		// and then make assertions.
+//
+//	}
+type HeartbeaterMock struct {
+	// HeartbeatFunc mocks the Heartbeat method.
+	HeartbeatFunc func(ctx context.Context, conn dbtx.DBTX) ([]uint32, error)
+
+	// calls tracks calls to the methods.
+	calls struct {
+		// Heartbeat holds details about calls to the Heartbeat method.
+		Heartbeat []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Conn is the conn argument value.
+			Conn dbtx.DBTX
+		}
+	}
+	lockHeartbeat sync.RWMutex
+}
+
+// Heartbeat calls HeartbeatFunc.
+func (mock *HeartbeaterMock) Heartbeat(ctx context.Context, conn dbtx.DBTX) ([]uint32, error) {
+	if mock.HeartbeatFunc == nil {
+		panic("HeartbeaterMock.HeartbeatFunc: method is nil but Heartbeater.Heartbeat was just called")
+	}
+	callInfo := struct {
+		Ctx  context.Context
+		Conn dbtx.DBTX
+	}{
+		Ctx:  ctx,
+		Conn: conn,
+	}
+	mock.lockHeartbeat.Lock()
+	mock.calls.Heartbeat = append(mock.calls.Heartbeat, callInfo)
+	mock.lockHeartbeat.Unlock()
+	return mock.HeartbeatFunc(ctx, conn)
+}
+
+// HeartbeatCalls gets all the calls that were made to Heartbeat.
+// Check the length with:
+//
+//	len(mockedHeartbeater.HeartbeatCalls())
+func (mock *HeartbeaterMock) HeartbeatCalls() []struct {
+	Ctx  context.Context
+	Conn dbtx.DBTX
+} {
+	var calls []struct {
+		Ctx  context.Context
+		Conn dbtx.DBTX
+	}
+	mock.lockHeartbeat.RLock()
+	calls = mock.calls.Heartbeat
+	mock.lockHeartbeat.RUnlock()
+	return calls
+}
+
+// Ensure, that ConnectorMock does implement leases.Connector.
+// If this is not the case, regenerate this file with moq.
+var _ leases.Connector = &ConnectorMock{}
+
+// ConnectorMock is a mock implementation of leases.Connector.
+//
+//	func TestSomethingThatUsesConnector(t *testing.T) {
+//
+//		// make and configure a mocked leases.Connector
+//		mockedConnector := &ConnectorMock{
+//			AcquireWriteFunc: func(ctx context.Context) (*pgxpool.Conn, error) {
+//				panic("mock out the AcquireWrite method")
+//			},
+//		}
+//
+//		// use mockedConnector in code that requires leases.Connector
+//		// and then make assertions.
+//
+//	}
+type ConnectorMock struct {
+	// AcquireWriteFunc mocks the AcquireWrite method.
+	AcquireWriteFunc func(ctx context.Context) (*pgxpool.Conn, error)
+
+	// calls tracks calls to the methods.
+	calls struct {
+		// AcquireWrite holds details about calls to the AcquireWrite method.
+		AcquireWrite []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+		}
+	}
+	lockAcquireWrite sync.RWMutex
+}
+
+// AcquireWrite calls AcquireWriteFunc.
+func (mock *ConnectorMock) AcquireWrite(ctx context.Context) (*pgxpool.Conn, error) {
+	if mock.AcquireWriteFunc == nil {
+		panic("ConnectorMock.AcquireWriteFunc: method is nil but Connector.AcquireWrite was just called")
+	}
+	callInfo := struct {
+		Ctx context.Context
+	}{
+		Ctx: ctx,
+	}
+	mock.lockAcquireWrite.Lock()
+	mock.calls.AcquireWrite = append(mock.calls.AcquireWrite, callInfo)
+	mock.lockAcquireWrite.Unlock()
+	return mock.AcquireWriteFunc(ctx)
+}
+
+// AcquireWriteCalls gets all the calls that were made to AcquireWrite.
+// Check the length with:
+//
+//	len(mockedConnector.AcquireWriteCalls())
+func (mock *ConnectorMock) AcquireWriteCalls() []struct {
+	Ctx context.Context
+} {
+	var calls []struct {
+		Ctx context.Context
+	}
+	mock.lockAcquireWrite.RLock()
+	calls = mock.calls.AcquireWrite
+	mock.lockAcquireWrite.RUnlock()
 	return calls
 }
