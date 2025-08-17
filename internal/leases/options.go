@@ -13,6 +13,7 @@ type Config struct {
 	NodeName          string
 	Range             Range
 	VNodeCount        uint32
+	HeartbeatTimeout  time.Duration
 	HeartbeatInterval time.Duration
 	LeaseTTL          time.Duration
 	Rand              *rand.Rand
@@ -22,6 +23,7 @@ func DefaultOptions() *Config {
 	return applyOptions(&Config{},
 		WithNodeName(hash.RandomString(12)),
 		WithVNodeCount(5),
+		WithHeartbeatTimeout(2*time.Second),
 		WithHeartbeatInterval(2*time.Second),
 		WithLeaseTTL(3*time.Second),
 		WithRand(rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))),
@@ -78,6 +80,12 @@ func WithNodeName(nodeName string) Option {
 func WithVNodeCount(count uint32) Option {
 	return func(cfg *Config) {
 		cfg.VNodeCount = count
+	}
+}
+
+func WithHeartbeatTimeout(timeout time.Duration) Option {
+	return func(cfg *Config) {
+		cfg.HeartbeatTimeout = timeout
 	}
 }
 

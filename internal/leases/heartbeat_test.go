@@ -345,7 +345,7 @@ func TestHeartbeat(t *testing.T) {
 			}
 
 			// act
-			err := sut.Heartbeat(t.Context(), db)
+			values, err := sut.Heartbeat(t.Context(), db)
 
 			// assert
 			assert.NoError(t, err)
@@ -354,8 +354,8 @@ func TestHeartbeat(t *testing.T) {
 				t.FailNow()
 			}
 			assert.EqualSlice(t, tt.want, got)
-			if !assert.EqualSlice(t, tt.values, sut.Values()) {
-				t.Logf("got : %v", sut.Values())
+			if !assert.EqualSlice(t, tt.values, values) {
+				t.Logf("got : %v", values)
 				t.Logf("want: %v", tt.values)
 			}
 			tt.assert(t, schemaMock)

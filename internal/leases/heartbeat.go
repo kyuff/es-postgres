@@ -24,19 +24,23 @@ type Heartbeat struct {
 	values []uint32
 }
 
-func (h *Heartbeat) Heartbeat(ctx context.Context, db dbtx.DBTX) error {
+func (h *Heartbeat) Heartbeat(ctx context.Context, db dbtx.DBTX) ([]uint32, error) {
 	ring, err := h.schema.RefreshLeases(ctx, db, h.cfg.NodeName, h.cfg.LeaseTTL)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	report := ring.Analyze(h.cfg.NodeName, h.cfg.Range, h.cfg.VNodeCount)
 
-	return errors.Join(
+	err = errors.Join(
 		h.approveLeases(ctx, db, report.Approve),
 		h.placeVNodes(ctx, db, report.MissingCount, report.UsedVNodes),
-		h.updateValues(ctx, db, report.Values),
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	return report.Values, nil
 }
 
 func (h *Heartbeat) approveLeases(ctx context.Context, db dbtx.DBTX, approve []VNode) error {
@@ -89,15 +93,6 @@ func (h *Heartbeat) findVNode(used vnodeSet) (uint32, error) {
 			return vnode, nil
 		}
 	}
-}
-
-func (h *Heartbeat) updateValues(ctx context.Context, db dbtx.DBTX, values []uint32) error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	h.values = values
-
-	return nil
 }
 
 func (h *Heartbeat) Values() []uint32 {
