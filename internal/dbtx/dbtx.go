@@ -1,4 +1,4 @@
-package database
+package dbtx
 
 import (
 	"context"

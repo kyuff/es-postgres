@@ -5,13 +5,15 @@ package processor_test
 
 import (
 	"context"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/kyuff/es"
-	"github.com/kyuff/es-postgres/internal/database"
-	"github.com/kyuff/es-postgres/internal/processor"
 	"iter"
 	"sync"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/kyuff/es"
+	"github.com/kyuff/es-postgres/internal/database"
+	"github.com/kyuff/es-postgres/internal/dbtx"
+	"github.com/kyuff/es-postgres/internal/processor"
 )
 
 // Ensure, that ConnectorMock does implement processor.Connector.
@@ -200,10 +202,10 @@ var _ processor.Schema = &SchemaMock{}
 //	}
 type SchemaMock struct {
 	// SelectOutboxWatermarkFunc mocks the SelectOutboxWatermark method.
-	SelectOutboxWatermarkFunc func(ctx context.Context, db database.DBTX, stream database.Stream) (database.OutboxWatermark, int64, error)
+	SelectOutboxWatermarkFunc func(ctx context.Context, db dbtx.DBTX, stream database.Stream) (database.OutboxWatermark, int64, error)
 
 	// UpdateOutboxWatermarkFunc mocks the UpdateOutboxWatermark method.
-	UpdateOutboxWatermarkFunc func(ctx context.Context, db database.DBTX, stream database.Stream, delay time.Duration, watermark database.OutboxWatermark) error
+	UpdateOutboxWatermarkFunc func(ctx context.Context, db dbtx.DBTX, stream database.Stream, delay time.Duration, watermark database.OutboxWatermark) error
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -212,7 +214,7 @@ type SchemaMock struct {
 			// Ctx is the ctx argument value.
 			Ctx context.Context
 			// Db is the db argument value.
-			Db database.DBTX
+			Db dbtx.DBTX
 			// Stream is the stream argument value.
 			Stream database.Stream
 		}
@@ -221,7 +223,7 @@ type SchemaMock struct {
 			// Ctx is the ctx argument value.
 			Ctx context.Context
 			// Db is the db argument value.
-			Db database.DBTX
+			Db dbtx.DBTX
 			// Stream is the stream argument value.
 			Stream database.Stream
 			// Delay is the delay argument value.
@@ -235,13 +237,13 @@ type SchemaMock struct {
 }
 
 // SelectOutboxWatermark calls SelectOutboxWatermarkFunc.
-func (mock *SchemaMock) SelectOutboxWatermark(ctx context.Context, db database.DBTX, stream database.Stream) (database.OutboxWatermark, int64, error) {
+func (mock *SchemaMock) SelectOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream database.Stream) (database.OutboxWatermark, int64, error) {
 	if mock.SelectOutboxWatermarkFunc == nil {
 		panic("SchemaMock.SelectOutboxWatermarkFunc: method is nil but Schema.SelectOutboxWatermark was just called")
 	}
 	callInfo := struct {
 		Ctx    context.Context
-		Db     database.DBTX
+		Db     dbtx.DBTX
 		Stream database.Stream
 	}{
 		Ctx:    ctx,
@@ -260,12 +262,12 @@ func (mock *SchemaMock) SelectOutboxWatermark(ctx context.Context, db database.D
 //	len(mockedSchema.SelectOutboxWatermarkCalls())
 func (mock *SchemaMock) SelectOutboxWatermarkCalls() []struct {
 	Ctx    context.Context
-	Db     database.DBTX
+	Db     dbtx.DBTX
 	Stream database.Stream
 } {
 	var calls []struct {
 		Ctx    context.Context
-		Db     database.DBTX
+		Db     dbtx.DBTX
 		Stream database.Stream
 	}
 	mock.lockSelectOutboxWatermark.RLock()
@@ -275,13 +277,13 @@ func (mock *SchemaMock) SelectOutboxWatermarkCalls() []struct {
 }
 
 // UpdateOutboxWatermark calls UpdateOutboxWatermarkFunc.
-func (mock *SchemaMock) UpdateOutboxWatermark(ctx context.Context, db database.DBTX, stream database.Stream, delay time.Duration, watermark database.OutboxWatermark) error {
+func (mock *SchemaMock) UpdateOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream database.Stream, delay time.Duration, watermark database.OutboxWatermark) error {
 	if mock.UpdateOutboxWatermarkFunc == nil {
 		panic("SchemaMock.UpdateOutboxWatermarkFunc: method is nil but Schema.UpdateOutboxWatermark was just called")
 	}
 	callInfo := struct {
 		Ctx       context.Context
-		Db        database.DBTX
+		Db        dbtx.DBTX
 		Stream    database.Stream
 		Delay     time.Duration
 		Watermark database.OutboxWatermark
@@ -304,14 +306,14 @@ func (mock *SchemaMock) UpdateOutboxWatermark(ctx context.Context, db database.D
 //	len(mockedSchema.UpdateOutboxWatermarkCalls())
 func (mock *SchemaMock) UpdateOutboxWatermarkCalls() []struct {
 	Ctx       context.Context
-	Db        database.DBTX
+	Db        dbtx.DBTX
 	Stream    database.Stream
 	Delay     time.Duration
 	Watermark database.OutboxWatermark
 } {
 	var calls []struct {
 		Ctx       context.Context
-		Db        database.DBTX
+		Db        dbtx.DBTX
 		Stream    database.Stream
 		Delay     time.Duration
 		Watermark database.OutboxWatermark

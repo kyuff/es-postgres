@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kyuff/es-postgres/internal/assert"
 	"github.com/kyuff/es-postgres/internal/database"
+	"github.com/kyuff/es-postgres/internal/dbtx"
 	"github.com/kyuff/es-postgres/internal/logger"
 	"github.com/kyuff/es-postgres/internal/reconcilers"
 	"github.com/kyuff/es-postgres/internal/uuid"
@@ -53,7 +54,7 @@ func TestPeriodic(t *testing.T) {
 		c.AcquireReadFunc = func(ctx context.Context) (*pgxpool.Conn, error) {
 			return &pgxpool.Conn{}, nil
 		}
-		s.SelectOutboxStreamIDsFunc = func(ctx context.Context, db database.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]database.Stream, error) {
+		s.SelectOutboxStreamIDsFunc = func(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]database.Stream, error) {
 			if len(s.SelectOutboxStreamIDsCalls()) > 1 {
 				return nil, nil
 			}
@@ -98,7 +99,7 @@ func TestPeriodic(t *testing.T) {
 		c.AcquireReadFunc = func(ctx context.Context) (*pgxpool.Conn, error) {
 			return &pgxpool.Conn{}, nil
 		}
-		s.SelectOutboxStreamIDsFunc = func(ctx context.Context, db database.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]database.Stream, error) {
+		s.SelectOutboxStreamIDsFunc = func(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]database.Stream, error) {
 			if len(s.SelectOutboxStreamIDsCalls()) > 5 {
 				return nil, nil
 			}
@@ -147,7 +148,7 @@ func TestPeriodic(t *testing.T) {
 		c.AcquireReadFunc = func(ctx context.Context) (*pgxpool.Conn, error) {
 			return &pgxpool.Conn{}, nil
 		}
-		s.SelectOutboxStreamIDsFunc = func(ctx context.Context, db database.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]database.Stream, error) {
+		s.SelectOutboxStreamIDsFunc = func(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]database.Stream, error) {
 			return newStreams(1), nil
 		}
 		v.ValuesFunc = func() []uint32 {
@@ -181,7 +182,7 @@ func TestPeriodic(t *testing.T) {
 		c.AcquireReadFunc = func(ctx context.Context) (*pgxpool.Conn, error) {
 			return nil, errors.New("fail")
 		}
-		s.SelectOutboxStreamIDsFunc = func(ctx context.Context, db database.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]database.Stream, error) {
+		s.SelectOutboxStreamIDsFunc = func(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]database.Stream, error) {
 			return newStreams(1), nil
 		}
 		v.ValuesFunc = func() []uint32 {
@@ -212,7 +213,7 @@ func TestPeriodic(t *testing.T) {
 		c.AcquireReadFunc = func(ctx context.Context) (*pgxpool.Conn, error) {
 			return &pgxpool.Conn{}, nil
 		}
-		s.SelectOutboxStreamIDsFunc = func(ctx context.Context, db database.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]database.Stream, error) {
+		s.SelectOutboxStreamIDsFunc = func(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]database.Stream, error) {
 			return nil, errors.New("fail")
 		}
 		v.ValuesFunc = func() []uint32 {

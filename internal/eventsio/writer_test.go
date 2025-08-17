@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kyuff/es"
 	"github.com/kyuff/es-postgres/internal/assert"
-	"github.com/kyuff/es-postgres/internal/database"
+	"github.com/kyuff/es-postgres/internal/dbtx"
 	"github.com/kyuff/es-postgres/internal/eventsio"
 	"github.com/kyuff/es-postgres/internal/seqs"
 	"github.com/kyuff/es-postgres/internal/testdata"
@@ -89,7 +89,7 @@ func TestEventWriter(t *testing.T) {
 			})
 		)
 
-		schema.WriteEventFunc = func(ctx context.Context, db database.DBTX, event es.Event, content, metadata []byte) error {
+		schema.WriteEventFunc = func(ctx context.Context, db dbtx.DBTX, event es.Event, content, metadata []byte) error {
 			return errors.New("fail")
 		}
 
@@ -122,7 +122,7 @@ func TestEventWriter(t *testing.T) {
 			})
 		)
 
-		schema.WriteEventFunc = func(ctx context.Context, db database.DBTX, event es.Event, content, metadata []byte) error {
+		schema.WriteEventFunc = func(ctx context.Context, db dbtx.DBTX, event es.Event, content, metadata []byte) error {
 			return nil
 		}
 
@@ -130,7 +130,7 @@ func TestEventWriter(t *testing.T) {
 			return []byte(`content`), nil
 		}
 
-		schema.InsertOutboxFunc = func(ctx context.Context, tx database.DBTX, typ string, id string, storeID string, eventNumber int64, watermark int64, partition uint32) (int64, error) {
+		schema.InsertOutboxFunc = func(ctx context.Context, tx dbtx.DBTX, typ string, id string, storeID string, eventNumber int64, watermark int64, partition uint32) (int64, error) {
 			assert.Equal(t, events[eventNumber-1].StreamType, typ)
 			assert.Equal(t, events[eventNumber-1].StreamID, id)
 			assert.Equal(t, events[eventNumber-1].StoreStreamID, storeID)
@@ -164,11 +164,11 @@ func TestEventWriter(t *testing.T) {
 			offset int64 = 3
 		)
 
-		schema.WriteEventFunc = func(ctx context.Context, db database.DBTX, event es.Event, content, metadata []byte) error {
+		schema.WriteEventFunc = func(ctx context.Context, db dbtx.DBTX, event es.Event, content, metadata []byte) error {
 			return nil
 		}
 
-		schema.UpdateOutboxFunc = func(ctx context.Context, tx database.DBTX, typ string, id string, eventNumber int64, lastEventNumber int64) (int64, error) {
+		schema.UpdateOutboxFunc = func(ctx context.Context, tx dbtx.DBTX, typ string, id string, eventNumber int64, lastEventNumber int64) (int64, error) {
 			assert.Equal(t, events[eventNumber-1].StreamType, typ)
 			assert.Equal(t, events[eventNumber-1].StreamID, id)
 			assert.Equal(t, events[eventNumber-1].EventNumber, eventNumber)
@@ -206,11 +206,11 @@ func TestEventWriter(t *testing.T) {
 			offset int64 = 3
 		)
 
-		schema.WriteEventFunc = func(ctx context.Context, db database.DBTX, event es.Event, content, metadata []byte) error {
+		schema.WriteEventFunc = func(ctx context.Context, db dbtx.DBTX, event es.Event, content, metadata []byte) error {
 			return nil
 		}
 
-		schema.UpdateOutboxFunc = func(ctx context.Context, tx database.DBTX, typ string, id string, eventNumber int64, lastEventNumber int64) (int64, error) {
+		schema.UpdateOutboxFunc = func(ctx context.Context, tx dbtx.DBTX, typ string, id string, eventNumber int64, lastEventNumber int64) (int64, error) {
 			return 0, nil
 		}
 
@@ -244,11 +244,11 @@ func TestEventWriter(t *testing.T) {
 			offset int64 = 3
 		)
 
-		schema.WriteEventFunc = func(ctx context.Context, db database.DBTX, event es.Event, content, metadata []byte) error {
+		schema.WriteEventFunc = func(ctx context.Context, db dbtx.DBTX, event es.Event, content, metadata []byte) error {
 			return nil
 		}
 
-		schema.UpdateOutboxFunc = func(ctx context.Context, tx database.DBTX, typ string, id string, eventNumber int64, lastEventNumber int64) (int64, error) {
+		schema.UpdateOutboxFunc = func(ctx context.Context, tx dbtx.DBTX, typ string, id string, eventNumber int64, lastEventNumber int64) (int64, error) {
 			return 2, nil
 		}
 
@@ -281,11 +281,11 @@ func TestEventWriter(t *testing.T) {
 			})
 		)
 
-		schema.WriteEventFunc = func(ctx context.Context, db database.DBTX, event es.Event, content, metadata []byte) error {
+		schema.WriteEventFunc = func(ctx context.Context, db dbtx.DBTX, event es.Event, content, metadata []byte) error {
 			return nil
 		}
 
-		schema.InsertOutboxFunc = func(ctx context.Context, tx database.DBTX, streamType string, streamID string, storeStreamID string, eventNumber int64, watermark int64, partition uint32) (int64, error) {
+		schema.InsertOutboxFunc = func(ctx context.Context, tx dbtx.DBTX, streamType string, streamID string, storeStreamID string, eventNumber int64, watermark int64, partition uint32) (int64, error) {
 			return 1, errors.New("some error")
 		}
 

@@ -11,6 +11,7 @@ import (
 	"github.com/kyuff/es"
 	"github.com/kyuff/es-postgres/internal/assert"
 	"github.com/kyuff/es-postgres/internal/database"
+	"github.com/kyuff/es-postgres/internal/dbtx"
 	"github.com/kyuff/es-postgres/internal/processor"
 	"github.com/kyuff/es-postgres/internal/seqs"
 	"github.com/kyuff/es-postgres/internal/testdata"
@@ -62,8 +63,8 @@ func TestProcess(t *testing.T) {
 			}
 		}
 
-		selectWatermark = func(w database.OutboxWatermark, eventNumber int64, err error) func(ctx context.Context, db database.DBTX, stream database.Stream) (database.OutboxWatermark, int64, error) {
-			return func(ctx context.Context, db database.DBTX, stream database.Stream) (database.OutboxWatermark, int64, error) {
+		selectWatermark = func(w database.OutboxWatermark, eventNumber int64, err error) func(ctx context.Context, db dbtx.DBTX, stream database.Stream) (database.OutboxWatermark, int64, error) {
+			return func(ctx context.Context, db dbtx.DBTX, stream database.Stream) (database.OutboxWatermark, int64, error) {
 				return w, eventNumber, err
 			}
 		}
@@ -76,8 +77,8 @@ func TestProcess(t *testing.T) {
 			}
 		}
 
-		updateWatermark = func(err error) func(ctx context.Context, db database.DBTX, stream database.Stream, delay time.Duration, watermark database.OutboxWatermark) error {
-			return func(ctx context.Context, db database.DBTX, stream database.Stream, delay time.Duration, watermark database.OutboxWatermark) error {
+		updateWatermark = func(err error) func(ctx context.Context, db dbtx.DBTX, stream database.Stream, delay time.Duration, watermark database.OutboxWatermark) error {
+			return func(ctx context.Context, db dbtx.DBTX, stream database.Stream, delay time.Duration, watermark database.OutboxWatermark) error {
 				return err
 			}
 		}

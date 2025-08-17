@@ -10,6 +10,7 @@ import (
 	"github.com/kyuff/es"
 	"github.com/kyuff/es-postgres/internal/assert"
 	"github.com/kyuff/es-postgres/internal/database"
+	"github.com/kyuff/es-postgres/internal/dbtx"
 	"github.com/kyuff/es-postgres/internal/testdata"
 	"github.com/kyuff/es-postgres/internal/uuid"
 )
@@ -48,7 +49,7 @@ func TestSchema(t *testing.T) {
 			}
 			return pool, schema
 		}
-		writeEvents = func(t *testing.T, db database.DBTX, schema *database.Schema, events []es.Event) {
+		writeEvents = func(t *testing.T, db dbtx.DBTX, schema *database.Schema, events []es.Event) {
 			for _, event := range events {
 				b, err := json.Marshal(event.Content)
 				if !assert.NoError(t, err) {
@@ -91,7 +92,7 @@ func TestSchema(t *testing.T) {
 			}
 			assert.Equalf(t, len(expected), n, "number of events")
 		}
-		insertOutbox = func(t *testing.T, conn database.DBTX, schema *database.Schema, streams []database.Stream, eventNumber, watermark int64, partition uint32) {
+		insertOutbox = func(t *testing.T, conn dbtx.DBTX, schema *database.Schema, streams []database.Stream, eventNumber, watermark int64, partition uint32) {
 			streamIDs := testdata.StreamIDs(len(streams))
 			for i, stream := range streams {
 				if _, err := schema.InsertOutbox(t.Context(), conn, stream.Type, streamIDs[i], stream.StoreID, eventNumber, watermark, partition); err != nil {

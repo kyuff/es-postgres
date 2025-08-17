@@ -11,7 +11,7 @@ import (
 
 const (
 	ReconcileLimit = 100
-	graceWindow    = time.Second
+	graceWindow    = time.Millisecond * 200
 )
 
 func NewPeriodic(logger Logger, connector Connector, schema Schema, valuer Valuer, interval time.Duration, timeout time.Duration, processTimeout time.Duration) *Periodic {
@@ -87,7 +87,12 @@ func (h *Periodic) reconcile(rootCtx context.Context, p Processor) error {
 				processCtx, processCancel := context.WithTimeout(rootCtx, h.processTimeout)
 				defer processCancel()
 
-				return p.Process(processCtx, stream)
+				err := p.Process(processCtx, stream)
+				if err != nil {
+					return err
+				}
+
+				return nil
 			})
 		}
 

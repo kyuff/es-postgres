@@ -26,3 +26,5 @@ up:
 down:
 	docker compose down --remove-orphans --volumes
 
+restart: down up
+

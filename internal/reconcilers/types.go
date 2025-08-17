@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kyuff/es-postgres/internal/database"
+	"github.com/kyuff/es-postgres/internal/dbtx"
 )
 
 type Valuer interface {
@@ -17,7 +18,7 @@ type Connector interface {
 }
 
 type Schema interface {
-	SelectOutboxStreamIDs(ctx context.Context, db database.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]database.Stream, error)
+	SelectOutboxStreamIDs(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]database.Stream, error)
 }
 
 type Logger interface {

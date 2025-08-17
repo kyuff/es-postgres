@@ -10,8 +10,13 @@ import (
 
 	"github.com/kyuff/es-postgres/backoff"
 	"github.com/kyuff/es-postgres/internal/hash"
+	"github.com/kyuff/es-postgres/internal/leases"
 	"github.com/kyuff/es-postgres/internal/logger"
 	"github.com/kyuff/es/codecs"
+)
+
+const (
+	defaultPartitionCount = 1024
 )
 
 type Config struct {
@@ -25,6 +30,7 @@ type Config struct {
 	reconcileTimeout    time.Duration
 	processTimeout      time.Duration
 	processBackoff      func(streamType string, retryCount int64) time.Duration
+	leasesOptions       []leases.Option
 }
 
 func defaultOptions() *Config {
@@ -34,12 +40,13 @@ func defaultOptions() *Config {
 		WithStartContext(context.Background()),
 		WithTablePrefix("es"),
 		withJsonCodec(),
-		WithFNVPartitioner(128),
 		WithReconcileInterval(time.Second*10),
 		WithReconcileTimeout(time.Second*5),
 		WithProcessTimeout(time.Second*3),
 		WithLinearProcessBackoff(time.Second),
 		WithReconcilePublishing(true),
+		WithFNVPartitioner(defaultPartitionCount),
+		withLeaseRange(0, defaultPartitionCount),
 	)
 
 }
@@ -79,11 +86,6 @@ func (c *Config) validate() error {
 }
 
 type Option func(cfg *Config)
-
-type Logger interface {
-	InfofCtx(ctx context.Context, template string, args ...any)
-	ErrorfCtx(ctx context.Context, template string, args ...any)
-}
 
 func applyOptions(options *Config, opts ...Option) *Config {
 	for _, opt := range opts {
@@ -209,4 +211,30 @@ func WithReconcilePublishing(enabled bool) Option {
 	return func(cfg *Config) {
 		cfg.reconcilePublishing = enabled
 	}
+}
+
+func withLeaseOption(opt leases.Option) Option {
+	return func(cfg *Config) {
+		cfg.leasesOptions = append(cfg.leasesOptions, opt)
+	}
+}
+
+// withLeaseRange sets the range of leases used by the consistent hashing mechanism.
+func withLeaseRange(from, to uint32) Option {
+	return withLeaseOption(leases.WithRange(leases.Range{
+		From: from,
+		To:   to,
+	}))
+}
+
+func withLeaseNodeName(nodeName string) Option {
+	return withLeaseOption(leases.WithNodeName(nodeName))
+}
+
+func withLeaseVNodeCount(count uint32) Option {
+	return withLeaseOption(leases.WithVNodeCount(count))
+}
+
+func withLeaseHeartbeatInterval(interval time.Duration) Option {
+	return withLeaseOption(leases.WithHeartbeatInterval(interval))
 }

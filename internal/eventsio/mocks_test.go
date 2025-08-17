@@ -5,12 +5,13 @@ package eventsio_test
 
 import (
 	"context"
-	"github.com/jackc/pgx/v5"
-	"github.com/kyuff/es"
-	"github.com/kyuff/es-postgres/internal/database"
-	"github.com/kyuff/es-postgres/internal/eventsio"
 	"iter"
 	"sync"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/kyuff/es"
+	"github.com/kyuff/es-postgres/internal/dbtx"
+	"github.com/kyuff/es-postgres/internal/eventsio"
 )
 
 // Ensure, that SchemaMock does implement eventsio.Schema.
@@ -43,16 +44,16 @@ var _ eventsio.Schema = &SchemaMock{}
 //	}
 type SchemaMock struct {
 	// InsertOutboxFunc mocks the InsertOutbox method.
-	InsertOutboxFunc func(ctx context.Context, tx database.DBTX, streamType string, streamID string, storeStreamID string, eventNumber int64, watermark int64, partition uint32) (int64, error)
+	InsertOutboxFunc func(ctx context.Context, tx dbtx.DBTX, streamType string, streamID string, storeStreamID string, eventNumber int64, watermark int64, partition uint32) (int64, error)
 
 	// SelectEventsFunc mocks the SelectEvents method.
-	SelectEventsFunc func(ctx context.Context, db database.DBTX, streamType string, streamID string, eventNumber int64) (pgx.Rows, error)
+	SelectEventsFunc func(ctx context.Context, db dbtx.DBTX, streamType string, streamID string, eventNumber int64) (pgx.Rows, error)
 
 	// UpdateOutboxFunc mocks the UpdateOutbox method.
-	UpdateOutboxFunc func(ctx context.Context, tx database.DBTX, streamType string, streamID string, eventNumber int64, lastEventNumber int64) (int64, error)
+	UpdateOutboxFunc func(ctx context.Context, tx dbtx.DBTX, streamType string, streamID string, eventNumber int64, lastEventNumber int64) (int64, error)
 
 	// WriteEventFunc mocks the WriteEvent method.
-	WriteEventFunc func(ctx context.Context, db database.DBTX, event es.Event, content []byte, metadata []byte) error
+	WriteEventFunc func(ctx context.Context, db dbtx.DBTX, event es.Event, content []byte, metadata []byte) error
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -61,7 +62,7 @@ type SchemaMock struct {
 			// Ctx is the ctx argument value.
 			Ctx context.Context
 			// Tx is the tx argument value.
-			Tx database.DBTX
+			Tx dbtx.DBTX
 			// StreamType is the streamType argument value.
 			StreamType string
 			// StreamID is the streamID argument value.
@@ -80,7 +81,7 @@ type SchemaMock struct {
 			// Ctx is the ctx argument value.
 			Ctx context.Context
 			// Db is the db argument value.
-			Db database.DBTX
+			Db dbtx.DBTX
 			// StreamType is the streamType argument value.
 			StreamType string
 			// StreamID is the streamID argument value.
@@ -93,7 +94,7 @@ type SchemaMock struct {
 			// Ctx is the ctx argument value.
 			Ctx context.Context
 			// Tx is the tx argument value.
-			Tx database.DBTX
+			Tx dbtx.DBTX
 			// StreamType is the streamType argument value.
 			StreamType string
 			// StreamID is the streamID argument value.
@@ -108,7 +109,7 @@ type SchemaMock struct {
 			// Ctx is the ctx argument value.
 			Ctx context.Context
 			// Db is the db argument value.
-			Db database.DBTX
+			Db dbtx.DBTX
 			// Event is the event argument value.
 			Event es.Event
 			// Content is the content argument value.
@@ -124,13 +125,13 @@ type SchemaMock struct {
 }
 
 // InsertOutbox calls InsertOutboxFunc.
-func (mock *SchemaMock) InsertOutbox(ctx context.Context, tx database.DBTX, streamType string, streamID string, storeStreamID string, eventNumber int64, watermark int64, partition uint32) (int64, error) {
+func (mock *SchemaMock) InsertOutbox(ctx context.Context, tx dbtx.DBTX, streamType string, streamID string, storeStreamID string, eventNumber int64, watermark int64, partition uint32) (int64, error) {
 	if mock.InsertOutboxFunc == nil {
 		panic("SchemaMock.InsertOutboxFunc: method is nil but Schema.InsertOutbox was just called")
 	}
 	callInfo := struct {
 		Ctx           context.Context
-		Tx            database.DBTX
+		Tx            dbtx.DBTX
 		StreamType    string
 		StreamID      string
 		StoreStreamID string
@@ -159,7 +160,7 @@ func (mock *SchemaMock) InsertOutbox(ctx context.Context, tx database.DBTX, stre
 //	len(mockedSchema.InsertOutboxCalls())
 func (mock *SchemaMock) InsertOutboxCalls() []struct {
 	Ctx           context.Context
-	Tx            database.DBTX
+	Tx            dbtx.DBTX
 	StreamType    string
 	StreamID      string
 	StoreStreamID string
@@ -169,7 +170,7 @@ func (mock *SchemaMock) InsertOutboxCalls() []struct {
 } {
 	var calls []struct {
 		Ctx           context.Context
-		Tx            database.DBTX
+		Tx            dbtx.DBTX
 		StreamType    string
 		StreamID      string
 		StoreStreamID string
@@ -184,13 +185,13 @@ func (mock *SchemaMock) InsertOutboxCalls() []struct {
 }
 
 // SelectEvents calls SelectEventsFunc.
-func (mock *SchemaMock) SelectEvents(ctx context.Context, db database.DBTX, streamType string, streamID string, eventNumber int64) (pgx.Rows, error) {
+func (mock *SchemaMock) SelectEvents(ctx context.Context, db dbtx.DBTX, streamType string, streamID string, eventNumber int64) (pgx.Rows, error) {
 	if mock.SelectEventsFunc == nil {
 		panic("SchemaMock.SelectEventsFunc: method is nil but Schema.SelectEvents was just called")
 	}
 	callInfo := struct {
 		Ctx         context.Context
-		Db          database.DBTX
+		Db          dbtx.DBTX
 		StreamType  string
 		StreamID    string
 		EventNumber int64
@@ -213,14 +214,14 @@ func (mock *SchemaMock) SelectEvents(ctx context.Context, db database.DBTX, stre
 //	len(mockedSchema.SelectEventsCalls())
 func (mock *SchemaMock) SelectEventsCalls() []struct {
 	Ctx         context.Context
-	Db          database.DBTX
+	Db          dbtx.DBTX
 	StreamType  string
 	StreamID    string
 	EventNumber int64
 } {
 	var calls []struct {
 		Ctx         context.Context
-		Db          database.DBTX
+		Db          dbtx.DBTX
 		StreamType  string
 		StreamID    string
 		EventNumber int64
@@ -232,13 +233,13 @@ func (mock *SchemaMock) SelectEventsCalls() []struct {
 }
 
 // UpdateOutbox calls UpdateOutboxFunc.
-func (mock *SchemaMock) UpdateOutbox(ctx context.Context, tx database.DBTX, streamType string, streamID string, eventNumber int64, lastEventNumber int64) (int64, error) {
+func (mock *SchemaMock) UpdateOutbox(ctx context.Context, tx dbtx.DBTX, streamType string, streamID string, eventNumber int64, lastEventNumber int64) (int64, error) {
 	if mock.UpdateOutboxFunc == nil {
 		panic("SchemaMock.UpdateOutboxFunc: method is nil but Schema.UpdateOutbox was just called")
 	}
 	callInfo := struct {
 		Ctx             context.Context
-		Tx              database.DBTX
+		Tx              dbtx.DBTX
 		StreamType      string
 		StreamID        string
 		EventNumber     int64
@@ -263,7 +264,7 @@ func (mock *SchemaMock) UpdateOutbox(ctx context.Context, tx database.DBTX, stre
 //	len(mockedSchema.UpdateOutboxCalls())
 func (mock *SchemaMock) UpdateOutboxCalls() []struct {
 	Ctx             context.Context
-	Tx              database.DBTX
+	Tx              dbtx.DBTX
 	StreamType      string
 	StreamID        string
 	EventNumber     int64
@@ -271,7 +272,7 @@ func (mock *SchemaMock) UpdateOutboxCalls() []struct {
 } {
 	var calls []struct {
 		Ctx             context.Context
-		Tx              database.DBTX
+		Tx              dbtx.DBTX
 		StreamType      string
 		StreamID        string
 		EventNumber     int64
@@ -284,13 +285,13 @@ func (mock *SchemaMock) UpdateOutboxCalls() []struct {
 }
 
 // WriteEvent calls WriteEventFunc.
-func (mock *SchemaMock) WriteEvent(ctx context.Context, db database.DBTX, event es.Event, content []byte, metadata []byte) error {
+func (mock *SchemaMock) WriteEvent(ctx context.Context, db dbtx.DBTX, event es.Event, content []byte, metadata []byte) error {
 	if mock.WriteEventFunc == nil {
 		panic("SchemaMock.WriteEventFunc: method is nil but Schema.WriteEvent was just called")
 	}
 	callInfo := struct {
 		Ctx      context.Context
-		Db       database.DBTX
+		Db       dbtx.DBTX
 		Event    es.Event
 		Content  []byte
 		Metadata []byte
@@ -313,14 +314,14 @@ func (mock *SchemaMock) WriteEvent(ctx context.Context, db database.DBTX, event 
 //	len(mockedSchema.WriteEventCalls())
 func (mock *SchemaMock) WriteEventCalls() []struct {
 	Ctx      context.Context
-	Db       database.DBTX
+	Db       dbtx.DBTX
 	Event    es.Event
 	Content  []byte
 	Metadata []byte
 } {
 	var calls []struct {
 		Ctx      context.Context
-		Db       database.DBTX
+		Db       dbtx.DBTX
 		Event    es.Event
 		Content  []byte
 		Metadata []byte

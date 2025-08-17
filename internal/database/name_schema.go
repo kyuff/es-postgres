@@ -27,5 +27,5 @@ func nameSchema(input string) string {
 	randomPart := base32.StdEncoding.EncodeToString(timeBytes)
 	randomValue := randomPart[8:13]
 
-	return "test_" + strings.ToLower(stableHash+randomValue)
+	return "test_" + strings.ToLower(stableHash+"_"+randomValue)
 }

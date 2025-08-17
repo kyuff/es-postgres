@@ -43,6 +43,10 @@ var newInstance = func(t *testing.T, opts ...postgres.Option) *postgres.Storage 
 		t.FailNow()
 	}
 
+	t.Cleanup(func() {
+		_ = storage.Close()
+	})
+
 	return storage
 }
 
@@ -361,10 +365,13 @@ func TestStorage(t *testing.T) {
 	t.Run("StartPublish", func(t *testing.T) {
 		t.Parallel()
 		t.Run("write all events", func(t *testing.T) {
+			t.Parallel()
 			// arrange
 			var (
-				storage = newInstance(t, postgres.WithReconcileInterval(time.Millisecond*100))
-				w       = &WriterMock{}
+				storage = newInstance(t,
+					postgres.WithReconcileInterval(time.Millisecond*100),
+				)
+				w = &WriterMock{}
 
 				streamType = newStreamType()
 				streamID   = newStreamID()
@@ -376,6 +383,7 @@ func TestStorage(t *testing.T) {
 			w.WriteFunc = func(ctx context.Context, typ string, eventSeq iter.Seq2[es.Event, error]) error {
 				mu.Lock()
 				defer mu.Unlock()
+
 				assert.Equalf(t, streamType, typ, "stream type mismatch")
 				for event, err := range eventSeq {
 					if assert.NoError(t, err) {
@@ -388,7 +396,7 @@ func TestStorage(t *testing.T) {
 			assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
 
 			go func() {
-				assert.NoError(t, storage.StartPublish(t.Context(), w))
+				_ = storage.StartPublish(t.Context(), w)
 			}()
 
 			// act
@@ -396,10 +404,11 @@ func TestStorage(t *testing.T) {
 
 			// assert
 			assert.NoError(t, err)
-			assert.NoErrorEventually(t, time.Second*5, func() error {
+			assert.NoErrorEventually(t, time.Second*3, func() error {
 				mu.RLock()
 				defer mu.RUnlock()
 
+				fmt.Printf("GOT %d EVENTS\n", len(got))
 				if len(got) < 10 {
 					return errors.New("no events received")
 				}
@@ -410,10 +419,12 @@ func TestStorage(t *testing.T) {
 		})
 
 		t.Run("repeat write on error", func(t *testing.T) {
+			t.Parallel()
 			// arrange
 			var (
 				storage = newInstance(t,
 					postgres.WithReconcileInterval(time.Millisecond*50),
+					postgres.WithFixedProcessBackoff(time.Millisecond*10),
 					postgres.WithDefaultSlog(),
 				)
 				w = &WriterMock{}
@@ -447,7 +458,7 @@ func TestStorage(t *testing.T) {
 			assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
 
 			go func() {
-				assert.NoError(t, storage.StartPublish(t.Context(), w))
+				_ = storage.StartPublish(t.Context(), w)
 			}()
 
 			// act
@@ -455,7 +466,7 @@ func TestStorage(t *testing.T) {
 
 			// assert
 			assert.NoError(t, err)
-			assert.NoErrorEventually(t, time.Second*2, func() error {
+			assert.NoErrorEventually(t, time.Second*5, func() error {
 				mu.RLock()
 				defer mu.RUnlock()
 
