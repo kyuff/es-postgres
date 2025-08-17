@@ -94,10 +94,3 @@ func (h *Heartbeat) findVNode(used vnodeSet) (uint32, error) {
 		}
 	}
 }
-
-func (h *Heartbeat) Values() []uint32 {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	return h.values
-}
