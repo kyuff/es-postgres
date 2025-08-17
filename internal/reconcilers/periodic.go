@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kyuff/es-postgres/internal/retry"
 	"github.com/kyuff/es-postgres/internal/uuid"
 	"golang.org/x/sync/errgroup"
 )
@@ -39,28 +40,15 @@ type Periodic struct {
 }
 
 func (h *Periodic) Reconcile(ctx context.Context, p Processor) error {
-	var ticker = time.NewTicker(h.interval)
-	var errorCount = 0
-	for {
-		select {
-		case <-ctx.Done():
-			ticker.Stop()
-			return nil
-		case <-ticker.C:
-			err := h.reconcile(ctx, p)
-			if err != nil {
-				errorCount++
-				h.logger.ErrorfCtx(ctx, "[es/postgres] Failed to reconcile the outbox: %s", err)
-			} else {
-				errorCount = 0
-			}
-
-			if errorCount > 10 {
-				return fmt.Errorf("max errors from outbox reached")
-			}
-		}
+	err := retry.Continue(ctx, h.interval, 10, func(ctx context.Context) error {
+		return h.reconcile(ctx, p)
+	})
+	if err != nil {
+		h.logger.ErrorfCtx(ctx, "[es/postgres] Failed to reconcile the outbox: %s", err)
+		return err
 	}
 
+	return nil
 }
 
 func (h *Periodic) reconcile(rootCtx context.Context, p Processor) error {
