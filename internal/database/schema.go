@@ -401,9 +401,15 @@ WITH
 		UPDATE {{ .Prefix }}_leases
         SET ttl = NOW() + $2::interval
         WHERE node_name = $1
+        RETURNING *
     )
-SELECT vnode, node_name, ttl > NOW(), status
-FROM {{ .Prefix }}_leases
+SELECT l.vnode, 
+       l.node_name, 
+       r.ttl > NOW(),
+       l.status
+FROM {{ .Prefix }}_leases AS l
+    LEFT JOIN refresh AS r USING (vnode)
+WHERE l.ttl >= NOW()
 ORDER BY vnode ASC;
 `
 }

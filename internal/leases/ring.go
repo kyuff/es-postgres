@@ -44,16 +44,40 @@ func (ring Ring) Analyze(name string, full Range, count uint32) Report {
 
 func (ring Ring) calculateApprovals(name string) []VNode {
 	var approvals []VNode
+	var lastLeased *VNode
+	var leaseCount = 0
 	for i, vnode := range ring {
 		var next = ring.nextVNode(i)
 
-		if vnode.NodeName == name {
-			if vnode.Status == Leased && next.Status == Pending {
+		switch {
+		case vnode.NodeName == name && vnode.Status == Leased:
+			lastLeased = &vnode
+		case vnode.NodeName == name && vnode.Status == Pending:
+			lastLeased = nil
+		case vnode.Status == Leased:
+			lastLeased = nil
+		}
+
+		if lastLeased != nil && next.Status == Pending {
+			approvals = append(approvals, next)
+		}
+
+		if vnode.Status == Leased {
+			leaseCount++
+		}
+	}
+
+	if leaseCount == 0 {
+		// all is pending, protocol is to approve the next nodes
+		for i, vnode := range ring {
+			var next = ring.nextVNode(i)
+			if vnode.NodeName != name {
+				continue
+			}
+
+			if next.Status == Pending {
 				approvals = append(approvals, next)
 			}
-			//if vnode.Status == Pending && next.Status == Pending {
-			//	approvals = append(approvals, next)
-			//}
 		}
 	}
 
