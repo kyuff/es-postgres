@@ -24,7 +24,7 @@ func Continue(ctx context.Context, interval time.Duration, maxErrors int, fn fun
 				errorCount = 0
 			}
 
-			if errorCount > maxErrors {
+			if errorCount >= maxErrors {
 				return fmt.Errorf("max errors reached")
 			}
 		}
