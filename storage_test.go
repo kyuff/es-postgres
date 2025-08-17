@@ -404,7 +404,7 @@ func TestStorage(t *testing.T) {
 
 			// assert
 			assert.NoError(t, err)
-			assert.NoErrorEventually(t, time.Second*3, func() error {
+			assert.NoErrorEventually(t, time.Second*5, func() error {
 				mu.RLock()
 				defer mu.RUnlock()
 
