@@ -31,7 +31,7 @@ type sqlQueries struct {
 	selectOutboxStreamIDs  string
 	selectOutboxWatermark  string
 	updateOutboxWatermark  string
-	selectLeases           string
+	refreshLeases          string
 	approveLease           string
 	insertLease            string
 }
@@ -53,7 +53,7 @@ func NewSchema(prefix string) (*Schema, error) {
 			&sql.selectOutboxStreamIDs,
 			&sql.selectOutboxWatermark,
 			&sql.updateOutboxWatermark,
-			&sql.selectLeases,
+			&sql.refreshLeases,
 			&sql.approveLease,
 			&sql.insertLease,
 		)
@@ -391,15 +391,25 @@ func (s *Schema) UpdateOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream
 }
 
 func init() {
-	sql.selectLeases = `
+	sql.refreshLeases = `
+WITH
+	evacuate AS (
+         DELETE FROM {{ .Prefix }}_leases
+         WHERE ttl < NOW()
+    ),
+    refresh AS (
+		UPDATE {{ .Prefix }}_leases
+        SET ttl = NOW() + $2::interval
+        WHERE node_name = $1
+    )
 SELECT vnode, node_name, ttl > NOW(), status
 FROM {{ .Prefix }}_leases
 ORDER BY vnode ASC;
 `
 }
 
-func (s *Schema) SelectLeases(ctx context.Context, db dbtx.DBTX) (leases.Ring, error) {
-	rows, err := db.Query(ctx, sql.selectLeases)
+func (s *Schema) RefreshLeases(ctx context.Context, db dbtx.DBTX, nodeName string, ttl time.Duration) (leases.Ring, error) {
+	rows, err := db.Query(ctx, sql.refreshLeases, nodeName, rfc8601.Format(ttl))
 	if err != nil {
 		return nil, err
 	}

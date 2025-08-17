@@ -25,7 +25,7 @@ type Heartbeat struct {
 }
 
 func (h *Heartbeat) Heartbeat(ctx context.Context, db dbtx.DBTX) error {
-	ring, err := h.schema.SelectLeases(ctx, db)
+	ring, err := h.schema.RefreshLeases(ctx, db, h.cfg.NodeName, h.cfg.LeaseTTL)
 	if err != nil {
 		return err
 	}
@@ -35,7 +35,6 @@ func (h *Heartbeat) Heartbeat(ctx context.Context, db dbtx.DBTX) error {
 	return errors.Join(
 		h.approveLeases(ctx, db, report.Approve),
 		h.placeVNodes(ctx, db, report.MissingCount, report.UsedVNodes),
-		h.updateTTL(ctx, db),
 		h.updateValues(ctx, db, report.Values),
 	)
 }
@@ -53,20 +52,20 @@ func (h *Heartbeat) approveLeases(ctx context.Context, db dbtx.DBTX, approve []V
 	return h.schema.ApproveLease(ctx, db, vnodes)
 }
 
-func (h *Heartbeat) placeVNodes(ctx context.Context, db dbtx.DBTX, missing uint32, blocked map[uint32]struct{}) error {
+func (h *Heartbeat) placeVNodes(ctx context.Context, db dbtx.DBTX, missing uint32, used vnodeSet) error {
 	for range missing {
-		vnode, err := h.placeVNode(ctx, db, blocked)
+		vnode, err := h.placeVNode(ctx, db, used)
 		if err != nil {
 			return err
 		}
-		blocked[vnode] = struct{}{}
+		used.add(vnode)
 	}
 
 	return nil
 }
 
-func (h *Heartbeat) placeVNode(ctx context.Context, db dbtx.DBTX, blocked map[uint32]struct{}) (uint32, error) {
-	vnode, err := h.findVNode(blocked)
+func (h *Heartbeat) placeVNode(ctx context.Context, db dbtx.DBTX, used vnodeSet) (uint32, error) {
+	vnode, err := h.findVNode(used)
 	if err != nil {
 		return 0, err
 	}
@@ -79,21 +78,17 @@ func (h *Heartbeat) placeVNode(ctx context.Context, db dbtx.DBTX, blocked map[ui
 	return vnode, nil
 }
 
-func (h *Heartbeat) findVNode(blocked map[uint32]struct{}) (uint32, error) {
-	if len(blocked) >= int(h.cfg.Range.Len()) {
+func (h *Heartbeat) findVNode(used vnodeSet) (uint32, error) {
+	if len(used) >= int(h.cfg.Range.Len()) {
 		return 0, fmt.Errorf("no vnodes available")
 	}
 
 	for {
 		vnode := h.cfg.Range.VNode(h.cfg.Rand)
-		if _, cannotUse := blocked[vnode]; !cannotUse {
+		if !used.has(vnode) {
 			return vnode, nil
 		}
 	}
-}
-
-func (h *Heartbeat) updateTTL(ctx context.Context, db dbtx.DBTX) error {
-	return nil
 }
 
 func (h *Heartbeat) updateValues(ctx context.Context, db dbtx.DBTX, values []uint32) error {

@@ -27,8 +27,8 @@ var _ leases.Schema = &SchemaMock{}
 //			InsertLeaseFunc: func(ctx context.Context, db dbtx.DBTX, vnode uint32, name string, ttl time.Duration, status string) error {
 //				panic("mock out the InsertLease method")
 //			},
-//			SelectLeasesFunc: func(ctx context.Context, db dbtx.DBTX) (leases.Ring, error) {
-//				panic("mock out the SelectLeases method")
+//			RefreshLeasesFunc: func(ctx context.Context, db dbtx.DBTX, nodeName string, ttl time.Duration) (leases.Ring, error) {
+//				panic("mock out the RefreshLeases method")
 //			},
 //		}
 //
@@ -43,8 +43,8 @@ type SchemaMock struct {
 	// InsertLeaseFunc mocks the InsertLease method.
 	InsertLeaseFunc func(ctx context.Context, db dbtx.DBTX, vnode uint32, name string, ttl time.Duration, status string) error
 
-	// SelectLeasesFunc mocks the SelectLeases method.
-	SelectLeasesFunc func(ctx context.Context, db dbtx.DBTX) (leases.Ring, error)
+	// RefreshLeasesFunc mocks the RefreshLeases method.
+	RefreshLeasesFunc func(ctx context.Context, db dbtx.DBTX, nodeName string, ttl time.Duration) (leases.Ring, error)
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -67,22 +67,26 @@ type SchemaMock struct {
 			Vnode uint32
 			// Name is the name argument value.
 			Name string
-			// LeaseTTL is the ttl argument value.
+			// TTL is the ttl argument value.
 			TTL time.Duration
 			// Status is the status argument value.
 			Status string
 		}
-		// SelectLeases holds details about calls to the SelectLeases method.
-		SelectLeases []struct {
+		// RefreshLeases holds details about calls to the RefreshLeases method.
+		RefreshLeases []struct {
 			// Ctx is the ctx argument value.
 			Ctx context.Context
 			// Db is the db argument value.
 			Db dbtx.DBTX
+			// NodeName is the nodeName argument value.
+			NodeName string
+			// TTL is the ttl argument value.
+			TTL time.Duration
 		}
 	}
-	lockApproveLease sync.RWMutex
-	lockInsertLease  sync.RWMutex
-	lockSelectLeases sync.RWMutex
+	lockApproveLease  sync.RWMutex
+	lockInsertLease   sync.RWMutex
+	lockRefreshLeases sync.RWMutex
 }
 
 // ApproveLease calls ApproveLeaseFunc.
@@ -177,38 +181,46 @@ func (mock *SchemaMock) InsertLeaseCalls() []struct {
 	return calls
 }
 
-// SelectLeases calls SelectLeasesFunc.
-func (mock *SchemaMock) SelectLeases(ctx context.Context, db dbtx.DBTX) (leases.Ring, error) {
-	if mock.SelectLeasesFunc == nil {
-		panic("SchemaMock.SelectLeasesFunc: method is nil but Schema.SelectLeases was just called")
+// RefreshLeases calls RefreshLeasesFunc.
+func (mock *SchemaMock) RefreshLeases(ctx context.Context, db dbtx.DBTX, nodeName string, ttl time.Duration) (leases.Ring, error) {
+	if mock.RefreshLeasesFunc == nil {
+		panic("SchemaMock.RefreshLeasesFunc: method is nil but Schema.RefreshLeases was just called")
 	}
 	callInfo := struct {
-		Ctx context.Context
-		Db  dbtx.DBTX
+		Ctx      context.Context
+		Db       dbtx.DBTX
+		NodeName string
+		TTL      time.Duration
 	}{
-		Ctx: ctx,
-		Db:  db,
+		Ctx:      ctx,
+		Db:       db,
+		NodeName: nodeName,
+		TTL:      ttl,
 	}
-	mock.lockSelectLeases.Lock()
-	mock.calls.SelectLeases = append(mock.calls.SelectLeases, callInfo)
-	mock.lockSelectLeases.Unlock()
-	return mock.SelectLeasesFunc(ctx, db)
+	mock.lockRefreshLeases.Lock()
+	mock.calls.RefreshLeases = append(mock.calls.RefreshLeases, callInfo)
+	mock.lockRefreshLeases.Unlock()
+	return mock.RefreshLeasesFunc(ctx, db, nodeName, ttl)
 }
 
-// SelectLeasesCalls gets all the calls that were made to SelectLeases.
+// RefreshLeasesCalls gets all the calls that were made to RefreshLeases.
 // Check the length with:
 //
-//	len(mockedSchema.SelectLeasesCalls())
-func (mock *SchemaMock) SelectLeasesCalls() []struct {
-	Ctx context.Context
-	Db  dbtx.DBTX
+//	len(mockedSchema.RefreshLeasesCalls())
+func (mock *SchemaMock) RefreshLeasesCalls() []struct {
+	Ctx      context.Context
+	Db       dbtx.DBTX
+	NodeName string
+	TTL      time.Duration
 } {
 	var calls []struct {
-		Ctx context.Context
-		Db  dbtx.DBTX
+		Ctx      context.Context
+		Db       dbtx.DBTX
+		NodeName string
+		TTL      time.Duration
 	}
-	mock.lockSelectLeases.RLock()
-	calls = mock.calls.SelectLeases
-	mock.lockSelectLeases.RUnlock()
+	mock.lockRefreshLeases.RLock()
+	calls = mock.calls.RefreshLeases
+	mock.lockRefreshLeases.RUnlock()
 	return calls
 }

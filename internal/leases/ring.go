@@ -15,7 +15,7 @@ type VNode struct {
 type Report struct {
 	Approve      []VNode
 	MissingCount uint32
-	UsedVNodes   map[uint32]struct{}
+	UsedVNodes   vnodeSet
 	Values       []uint32
 }
 
@@ -27,7 +27,7 @@ func (ring Ring) Analyze(name string, full Range, count uint32) Report {
 	if len(ring) == 0 {
 		return Report{
 			MissingCount: count,
-			UsedVNodes:   make(map[uint32]struct{}),
+			UsedVNodes:   make(vnodeSet),
 		}
 	}
 
@@ -51,9 +51,9 @@ func (ring Ring) calculateApprovals(name string) []VNode {
 			if vnode.Status == Leased && next.Status == Pending {
 				approvals = append(approvals, next)
 			}
-			if vnode.Status == Pending && next.Status == Pending {
-				approvals = append(approvals, next)
-			}
+			//if vnode.Status == Pending && next.Status == Pending {
+			//	approvals = append(approvals, next)
+			//}
 		}
 	}
 
@@ -69,6 +69,10 @@ func (ring Ring) calculateValues(name string, full Range, approvals []VNode) []u
 	var values []uint32
 	for i, vnode := range ring {
 		var next = ring.nextVNode(i)
+
+		if vnode.NodeName != name {
+			continue
+		}
 
 		if vnode.Status == Leased || preApproved[vnode.VNode] {
 			if next.VNode > vnode.VNode {
@@ -100,17 +104,17 @@ func (ring Ring) nextVNode(i int) VNode {
 	return ring[i+1]
 }
 
-func (ring Ring) calculateMissingAndUsed(name string, count uint32) (uint32, map[uint32]struct{}) {
+func (ring Ring) calculateMissingAndUsed(name string, count uint32) (uint32, vnodeSet) {
 	var (
 		seen uint32 = 0
-		used        = make(map[uint32]struct{})
+		used        = make(vnodeSet)
 	)
 
 	for _, vnode := range ring {
 		if vnode.NodeName == name {
 			seen++
 		}
-		used[vnode.VNode] = struct{}{}
+		used.add(vnode.VNode)
 	}
 
 	return count - seen, used
