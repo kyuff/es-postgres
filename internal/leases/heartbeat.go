@@ -34,13 +34,13 @@ func (h *Heartbeat) Heartbeat(ctx context.Context, db dbtx.DBTX) error {
 
 	return errors.Join(
 		h.approveLeases(ctx, db, report.Approve),
-		h.placeVNodes(ctx, db, report.MissingCount, report.BlockedVNodes),
+		h.placeVNodes(ctx, db, report.MissingCount, report.UsedVNodes),
 		h.updateTTL(ctx, db),
 		h.updateValues(ctx, db, report.Values),
 	)
 }
 
-func (h *Heartbeat) approveLeases(ctx context.Context, db dbtx.DBTX, approve []Info) error {
+func (h *Heartbeat) approveLeases(ctx context.Context, db dbtx.DBTX, approve []VNode) error {
 	if len(approve) == 0 {
 		return nil
 	}

@@ -73,7 +73,7 @@ func TestHeartbeat(t *testing.T) {
 				{VNode: 3, NodeName: "node1", Valid: true, Status: leases.Leased},
 				{VNode: 7, NodeName: "node1", Valid: true, Status: leases.Leased},
 			},
-			values: leases.Range{From: 0, To: 10}.Values(),
+			values: []uint32{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
 			assert: func(t *testing.T, schema *SchemaMock) {
 				assert.Equal(t, 1, len(schema.SelectLeasesCalls()))
 				assert.Equal(t, 0, len(schema.ApproveLeaseCalls()))
@@ -96,11 +96,34 @@ func TestHeartbeat(t *testing.T) {
 				{VNode: 3, NodeName: "node1", Valid: true, Status: leases.Leased},
 				{VNode: 7, NodeName: "new", Valid: true, Status: leases.Leased},
 			},
-			values: leases.Range{From: 3, To: 7}.Values(),
+			values: []uint32{3, 4, 5, 6},
 			assert: func(t *testing.T, schema *SchemaMock) {
 				assert.Equal(t, 1, len(schema.SelectLeasesCalls()))
 				assert.Equal(t, 1, len(schema.ApproveLeaseCalls()))
 				assert.Equal(t, 0, len(schema.InsertLeaseCalls()))
+			},
+		},
+
+		{
+			name: "approve new node af looping the circle",
+			opts: []leases.Option{
+				leases.WithNodeName("node1"),
+				leases.WithVNodeCount(1),
+				leases.WithRange(leases.Range{From: 0, To: 10}),
+			},
+			ring: leases.Ring{
+				{VNode: 3, NodeName: "new", Valid: true, Status: leases.Pending},
+				{VNode: 7, NodeName: "node1", Valid: true, Status: leases.Leased},
+			},
+			want: leases.Ring{
+				{VNode: 3, NodeName: "new", Valid: true, Status: leases.Leased},
+				{VNode: 7, NodeName: "node1", Valid: true, Status: leases.Leased},
+			},
+			values: []uint32{0, 1, 2, 7, 8, 9},
+			assert: func(t *testing.T, schema *SchemaMock) {
+				assert.Equalf(t, 1, len(schema.SelectLeasesCalls()), "SelectLeases")
+				assert.Equalf(t, 1, len(schema.ApproveLeaseCalls()), "ApproveLease")
+				assert.Equalf(t, 0, len(schema.InsertLeaseCalls()), "InsertLease")
 			},
 		},
 
@@ -113,15 +136,15 @@ func TestHeartbeat(t *testing.T) {
 			},
 			ring: leases.Ring{
 				{VNode: 3, NodeName: "node1", Valid: true, Status: leases.Leased},
-				{VNode: 6, NodeName: "node1", Valid: true, Status: leases.Pending},
+				{VNode: 5, NodeName: "node1", Valid: true, Status: leases.Pending},
 				{VNode: 7, NodeName: "node1", Valid: true, Status: leases.Leased},
 			},
 			want: leases.Ring{
 				{VNode: 3, NodeName: "node1", Valid: true, Status: leases.Leased},
-				{VNode: 6, NodeName: "node1", Valid: true, Status: leases.Leased},
+				{VNode: 5, NodeName: "node1", Valid: true, Status: leases.Leased},
 				{VNode: 7, NodeName: "node1", Valid: true, Status: leases.Leased},
 			},
-			values: leases.Range{From: 0, To: 10}.Values(),
+			values: []uint32{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
 			assert: func(t *testing.T, schema *SchemaMock) {
 				assert.Equalf(t, 1, len(schema.SelectLeasesCalls()), "SelectLeases")
 				assert.Equalf(t, 1, len(schema.ApproveLeaseCalls()), "ApproveLease")
@@ -130,7 +153,7 @@ func TestHeartbeat(t *testing.T) {
 		},
 
 		{
-			name: "lease another node",
+			name: "lease a new vnode",
 			opts: []leases.Option{
 				leases.WithNodeName("node1"),
 				leases.WithVNodeCount(3),
@@ -145,11 +168,84 @@ func TestHeartbeat(t *testing.T) {
 				{VNode: 6, NodeName: "node1", Valid: true, Status: leases.Pending},
 				{VNode: 7, NodeName: "node1", Valid: true, Status: leases.Leased},
 			},
-			values: leases.Range{From: 0, To: 10}.Values(),
+			values: []uint32{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
 			assert: func(t *testing.T, schema *SchemaMock) {
 				assert.Equal(t, 1, len(schema.SelectLeasesCalls()))
 				assert.Equal(t, 0, len(schema.ApproveLeaseCalls()))
 				assert.Equal(t, 1, len(schema.InsertLeaseCalls()))
+			},
+		},
+
+		{
+			name: "lease new nodes on first run",
+			opts: []leases.Option{
+				leases.WithNodeName("node1"),
+				leases.WithVNodeCount(3),
+				leases.WithRange(leases.Range{From: 0, To: 10}),
+			},
+			ring: leases.Ring{},
+			want: leases.Ring{
+				{VNode: 2, NodeName: "node1", Valid: true, Status: leases.Pending},
+				{VNode: 6, NodeName: "node1", Valid: true, Status: leases.Pending},
+				{VNode: 7, NodeName: "node1", Valid: true, Status: leases.Pending},
+			},
+			values: []uint32{},
+			assert: func(t *testing.T, schema *SchemaMock) {
+				assert.Equalf(t, 1, len(schema.SelectLeasesCalls()), "SelectLeases")
+				assert.Equalf(t, 0, len(schema.ApproveLeaseCalls()), "ApproveLease")
+				assert.Equalf(t, 3, len(schema.InsertLeaseCalls()), "InsertLease")
+			},
+		},
+
+		{
+			name: "approve self when pending",
+			opts: []leases.Option{
+				leases.WithNodeName("node1"),
+				leases.WithVNodeCount(3),
+				leases.WithRange(leases.Range{From: 0, To: 10}),
+			},
+			ring: leases.Ring{
+				{VNode: 2, NodeName: "node1", Valid: true, Status: leases.Pending},
+				{VNode: 6, NodeName: "node1", Valid: true, Status: leases.Pending},
+				{VNode: 7, NodeName: "node1", Valid: true, Status: leases.Pending},
+			},
+			want: leases.Ring{
+				{VNode: 2, NodeName: "node1", Valid: true, Status: leases.Leased},
+				{VNode: 6, NodeName: "node1", Valid: true, Status: leases.Leased},
+				{VNode: 7, NodeName: "node1", Valid: true, Status: leases.Leased},
+			},
+			values: []uint32{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
+			assert: func(t *testing.T, schema *SchemaMock) {
+				assert.Equalf(t, 1, len(schema.SelectLeasesCalls()), "SelectLeases")
+				assert.Equalf(t, 1, len(schema.ApproveLeaseCalls()), "ApproveLease")
+				assert.Equalf(t, 0, len(schema.InsertLeaseCalls()), "InsertLease")
+			},
+		},
+
+		{
+			name: "approve other when self is pending",
+			opts: []leases.Option{
+				leases.WithNodeName("node1"),
+				leases.WithVNodeCount(2),
+				leases.WithRange(leases.Range{From: 0, To: 10}),
+			},
+			ring: leases.Ring{
+				{VNode: 2, NodeName: "node1", Valid: true, Status: leases.Pending},
+				{VNode: 4, NodeName: "other", Valid: true, Status: leases.Pending},
+				{VNode: 6, NodeName: "node1", Valid: true, Status: leases.Pending},
+				{VNode: 8, NodeName: "other", Valid: true, Status: leases.Pending},
+			},
+			want: leases.Ring{
+				{VNode: 2, NodeName: "node1", Valid: true, Status: leases.Pending},
+				{VNode: 4, NodeName: "other", Valid: true, Status: leases.Leased},
+				{VNode: 6, NodeName: "node1", Valid: true, Status: leases.Pending},
+				{VNode: 8, NodeName: "other", Valid: true, Status: leases.Leased},
+			},
+			values: []uint32{},
+			assert: func(t *testing.T, schema *SchemaMock) {
+				assert.Equalf(t, 1, len(schema.SelectLeasesCalls()), "SelectLeases")
+				assert.Equalf(t, 1, len(schema.ApproveLeaseCalls()), "ApproveLease")
+				assert.Equalf(t, 0, len(schema.InsertLeaseCalls()), "InsertLease")
 			},
 		},
 	}

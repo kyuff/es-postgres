@@ -407,7 +407,7 @@ func (s *Schema) SelectLeases(ctx context.Context, db dbtx.DBTX) (leases.Ring, e
 
 	var ring leases.Ring
 	for rows.Next() {
-		var info leases.Info
+		var info leases.VNode
 		err = rows.Scan(
 			&info.VNode,
 			&info.NodeName,

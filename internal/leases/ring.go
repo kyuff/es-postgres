@@ -5,7 +5,7 @@ import (
 	"sort"
 )
 
-type Info struct {
+type VNode struct {
 	VNode    uint32
 	NodeName string
 	Valid    bool
@@ -13,107 +13,113 @@ type Info struct {
 }
 
 type Report struct {
-	Approve       []Info
-	MissingCount  uint32
-	BlockedVNodes map[uint32]struct{}
-	Values        []uint32
+	Approve      []VNode
+	MissingCount uint32
+	UsedVNodes   map[uint32]struct{}
+	Values       []uint32
 }
 
-type Ring []Info
+type Ring []VNode
 
 func (ring Ring) Analyze(name string, full Range, count uint32) Report {
 	sort.Slice(ring, func(i, j int) bool { return ring[i].VNode < ring[j].VNode })
 
 	if len(ring) == 0 {
 		return Report{
-			MissingCount:  count,
-			BlockedVNodes: make(map[uint32]struct{}),
+			MissingCount: count,
+			UsedVNodes:   make(map[uint32]struct{}),
 		}
 	}
 
-	if len(ring) == 1 {
-		var (
-			missing = count
-			values  []uint32
-		)
+	approvals := ring.calculateApprovals(name)
+	missing, usedVNodes := ring.calculateMissingAndUsed(name, count)
 
-		if ring[0].NodeName == name {
-			missing--
-			values = full.Values()
-		}
+	return Report{
+		Approve:      approvals,
+		Values:       ring.calculateValues(name, full, approvals),
+		MissingCount: missing,
+		UsedVNodes:   usedVNodes,
+	}
+}
 
-		return Report{
-			Approve:      nil,
-			Values:       values,
-			MissingCount: missing,
-			BlockedVNodes: map[uint32]struct{}{
-				ring[0].VNode: {},
-			},
+func (ring Ring) calculateApprovals(name string) []VNode {
+	var approvals []VNode
+	for i, vnode := range ring {
+		var next = ring.nextVNode(i)
+
+		if vnode.NodeName == name {
+			if vnode.Status == Leased && next.Status == Pending {
+				approvals = append(approvals, next)
+			}
+			if vnode.Status == Pending && next.Status == Pending {
+				approvals = append(approvals, next)
+			}
 		}
 	}
 
-	var (
-		seen      uint32 = 0
-		approve   []Info
-		values    []uint32
-		blocked   = make(map[uint32]struct{})
-		lastOwned *Info
-	)
+	return approvals
+}
 
-	for _, info := range ring {
-		blocked[info.VNode] = struct{}{}
-		if lastOwned != nil {
-			if info.Status == Pending {
-				approve = append(approve, info)
-			}
-		}
-
-		if name == info.NodeName {
-			seen++
-
-			if lastOwned == nil {
-				lastOwned = &info
-				continue
-			}
-
-			values = append(values, Range{
-				From: lastOwned.VNode,
-				To:   info.VNode,
-			}.Values()...)
-
-			lastOwned = &info
-		} else {
-			if lastOwned != nil {
-				values = append(values, Range{
-					From: lastOwned.VNode,
-					To:   info.VNode,
-				}.Values()...)
-				lastOwned = nil
-			}
-
-		}
-
+func (ring Ring) calculateValues(name string, full Range, approvals []VNode) []uint32 {
+	var preApproved = make(map[uint32]bool)
+	for _, vnode := range approvals {
+		preApproved[vnode.VNode] = vnode.NodeName == name
 	}
 
-	if lastOwned != nil {
-		// head
-		values = append(values, Range{
-			From: full.From,
-			To:   ring[0].VNode,
-		}.Values()...)
-		// tail
-		values = append(values, Range{
-			From: lastOwned.VNode,
-			To:   full.To,
-		}.Values()...)
+	var values []uint32
+	for i, vnode := range ring {
+		var next = ring.nextVNode(i)
+
+		if vnode.Status == Leased || preApproved[vnode.VNode] {
+			if next.VNode > vnode.VNode {
+				values = append(values, fromTo(vnode.VNode, next.VNode)...)
+			} else {
+				values = append(values, fromTo(full.From, next.VNode)...)
+				values = append(values, fromTo(vnode.VNode, full.To)...)
+			}
+		}
 	}
 
 	slices.Sort(values)
 
-	return Report{
-		Approve:       approve,
-		Values:        values,
-		MissingCount:  count - seen,
-		BlockedVNodes: blocked,
+	return values
+}
+
+func (ring Ring) nextVNode(i int) VNode {
+	if len(ring) == 0 {
+		return VNode{}
 	}
+	if len(ring) == 1 {
+		return ring[0]
+	}
+
+	if len(ring) <= i+1 {
+		return ring[0]
+	}
+
+	return ring[i+1]
+}
+
+func (ring Ring) calculateMissingAndUsed(name string, count uint32) (uint32, map[uint32]struct{}) {
+	var (
+		seen uint32 = 0
+		used        = make(map[uint32]struct{})
+	)
+
+	for _, vnode := range ring {
+		if vnode.NodeName == name {
+			seen++
+		}
+		used[vnode.VNode] = struct{}{}
+	}
+
+	return count - seen, used
+}
+
+func fromTo(from, to uint32) []uint32 {
+	var items []uint32
+	for i := from; i < to; i++ {
+		items = append(items, i)
+	}
+	return items
 }
