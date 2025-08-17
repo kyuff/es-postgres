@@ -31,7 +31,9 @@ type sqlQueries struct {
 	selectOutboxStreamIDs  string
 	selectOutboxWatermark  string
 	updateOutboxWatermark  string
-	refreshLeases          string
+	evacuateLeases         string
+	updateLeases           string
+	selectLeases           string
 	approveLease           string
 	insertLease            string
 }
@@ -53,7 +55,9 @@ func NewSchema(prefix string) (*Schema, error) {
 			&sql.selectOutboxStreamIDs,
 			&sql.selectOutboxWatermark,
 			&sql.updateOutboxWatermark,
-			&sql.refreshLeases,
+			&sql.evacuateLeases,
+			&sql.updateLeases,
+			&sql.selectLeases,
 			&sql.approveLease,
 			&sql.insertLease,
 		)
@@ -391,31 +395,31 @@ func (s *Schema) UpdateOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream
 }
 
 func init() {
-	sql.refreshLeases = `
-WITH
-	evacuate AS (
-         DELETE FROM {{ .Prefix }}_leases
-         WHERE ttl < NOW()
-    ),
-    refresh AS (
-		UPDATE {{ .Prefix }}_leases
-        SET ttl = NOW() + $2::interval
-        WHERE node_name = $1
-        RETURNING *
-    )
-SELECT l.vnode, 
-       l.node_name, 
-       r.ttl > NOW(),
-       l.status
-FROM {{ .Prefix }}_leases AS l
-    LEFT JOIN refresh AS r USING (vnode)
-WHERE l.ttl >= NOW()
+	sql.evacuateLeases = `
+DELETE FROM {{ .Prefix }}_leases WHERE ttl < NOW()
+`
+	sql.updateLeases = `
+UPDATE {{ .Prefix }}_leases SET ttl = NOW() + $2::interval WHERE node_name = $1
+`
+	sql.selectLeases = `
+SELECT vnode, node_name, ttl > NOW() AS valid, status
+FROM {{ .Prefix }}_leases
 ORDER BY vnode ASC;
+
 `
 }
 
 func (s *Schema) RefreshLeases(ctx context.Context, db dbtx.DBTX, nodeName string, ttl time.Duration) (leases.Ring, error) {
-	rows, err := db.Query(ctx, sql.refreshLeases, nodeName, rfc8601.Format(ttl))
+	_, err := db.Exec(ctx, sql.evacuateLeases)
+	if err != nil {
+		return nil, err
+	}
+	_, err = db.Exec(ctx, sql.updateLeases, nodeName, rfc8601.Format(ttl))
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := db.Query(ctx, sql.selectLeases)
 	if err != nil {
 		return nil, err
 	}

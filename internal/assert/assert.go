@@ -166,6 +166,17 @@ func Truef(t *testing.T, got bool, format string, args ...any) bool {
 	return true
 }
 
+func Falsef(t *testing.T, got bool, format string, args ...any) bool {
+	t.Helper()
+	if got {
+		t.Logf(format, args...)
+		t.Fail()
+		return false
+	}
+
+	return true
+}
+
 func Panic(t *testing.T, assert func()) {
 	t.Helper()
 	defer func() {
