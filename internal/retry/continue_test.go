@@ -45,8 +45,7 @@ func TestContinue(t *testing.T) {
 		})
 
 		// assert
-		assert.No
-		Error(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 5, calls)
 	})
 }
