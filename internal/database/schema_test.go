@@ -58,6 +58,17 @@ func TestSchema(t *testing.T) {
 				assert.NoError(t, schema.WriteEvent(t.Context(), db, event, b, []byte("{}")))
 			}
 		}
+		assertEqualRefsInRows = func(t *testing.T, expected []es.StreamReference, rows pgx.Rows) {
+			t.Helper()
+			n := 0
+			for rows.Next() {
+				var got es.StreamReference
+				err := rows.Scan(&got.StreamType, &got.StreamID, &got.StoreStreamID)
+				assert.NoError(t, err)
+				assert.Equal(t, expected[n], got)
+				n++
+			}
+		}
 		assertEqualEventsInRow = func(t *testing.T, expected []es.Event, rows pgx.Rows) {
 			t.Helper()
 			n := 0
@@ -344,110 +355,102 @@ func TestSchema(t *testing.T) {
 		t.Run("full list on empty token", func(t *testing.T) {
 			// arrange
 			var (
-				conn, schema         = newSchema(t)
-				streamType           = testdata.StreamType()
-				count                = 10
-				storeStreamIDs       = uuid.V7At(time.Now(), count)
-				streamIDs            = testdata.StreamIDs(count)
-				token                = ""
-				limit          int64 = 100
+				conn, schema       = newSchema(t)
+				streamType         = testdata.StreamType()
+				count              = 10
+				refs               = testdata.StreamReference(streamType, count)
+				token              = ""
+				limit        int64 = 100
 			)
 
-			for i, id := range storeStreamIDs {
-				if _, err := schema.InsertOutbox(t.Context(), conn, streamType, streamIDs[i], id, 1, 1, 1); err != nil {
+			for _, ref := range refs {
+				if _, err := schema.InsertOutbox(t.Context(), conn, streamType, ref.StreamID, ref.StoreStreamID, 1, 1, 1); err != nil {
 					t.Fatal(err)
 				}
 			}
 
 			// act
-			got, nextToken, err := schema.SelectStreamIDs(t.Context(), conn, streamType, token, limit)
+			got, err := schema.SelectStreamReferences(t.Context(), conn, streamType, token, limit)
 
 			// assert
 			assert.NoError(t, err)
-			assert.EqualSlice(t, streamIDs, got)
-			assert.Equal(t, storeStreamIDs[count-1], nextToken)
+			assertEqualRefsInRows(t, refs, got)
 		})
 
 		t.Run("read until limit", func(t *testing.T) {
 			// arrange
 			var (
-				conn, schema         = newSchema(t)
-				streamType           = testdata.StreamType()
-				count                = 10
-				storeStreamIDs       = uuid.V7At(time.Now(), count)
-				streamIDs            = testdata.StreamIDs(count)
-				token                = ""
-				limit          int64 = 5
+				conn, schema       = newSchema(t)
+				streamType         = testdata.StreamType()
+				count              = 10
+				refs               = testdata.StreamReference(streamType, count)
+				token              = ""
+				limit        int64 = 5
 			)
 
-			for i, id := range storeStreamIDs {
-				if _, err := schema.InsertOutbox(t.Context(), conn, streamType, streamIDs[i], id, 1, 1, 1); err != nil {
+			for _, ref := range refs {
+				if _, err := schema.InsertOutbox(t.Context(), conn, streamType, ref.StreamID, ref.StoreStreamID, 1, 1, 1); err != nil {
 					t.Fatal(err)
 				}
 			}
 
 			// act
-			got, nextToken, err := schema.SelectStreamIDs(t.Context(), conn, streamType, token, limit)
+			got, err := schema.SelectStreamReferences(t.Context(), conn, streamType, token, limit)
 
 			// assert
 			assert.NoError(t, err)
-			assert.EqualSlice(t, streamIDs[:limit], got)
-			assert.Equal(t, storeStreamIDs[limit-1], nextToken)
+			assertEqualRefsInRows(t, refs[:limit], got)
 		})
 
 		t.Run("read from offset", func(t *testing.T) {
 			// arrange
 			var (
-				conn, schema         = newSchema(t)
-				streamType           = testdata.StreamType()
-				count                = 10
-				storeStreamIDs       = uuid.V7At(time.Now(), count)
-				streamIDs            = testdata.StreamIDs(count)
-				offset               = 4
-				token                = storeStreamIDs[offset-1]
-				limit          int64 = 100
+				conn, schema       = newSchema(t)
+				streamType         = testdata.StreamType()
+				count              = 10
+				refs               = testdata.StreamReference(streamType, count)
+				offset             = 4
+				token              = refs[offset-1].StoreStreamID
+				limit        int64 = 100
 			)
 
-			for i, id := range storeStreamIDs {
-				if _, err := schema.InsertOutbox(t.Context(), conn, streamType, streamIDs[i], id, 1, 1, 1); err != nil {
+			for _, ref := range refs {
+				if _, err := schema.InsertOutbox(t.Context(), conn, streamType, ref.StreamID, ref.StoreStreamID, 1, 1, 1); err != nil {
 					t.Fatal(err)
 				}
 			}
 
 			// act
-			got, nextToken, err := schema.SelectStreamIDs(t.Context(), conn, streamType, token, limit)
+			got, err := schema.SelectStreamReferences(t.Context(), conn, streamType, token, limit)
 
 			// assert
 			assert.NoError(t, err)
-			assert.EqualSlice(t, streamIDs[offset:], got)
-			assert.Equal(t, storeStreamIDs[count-1], nextToken)
+			assertEqualRefsInRows(t, refs[offset:], got)
 		})
 
 		t.Run("read nothing when offset after tail", func(t *testing.T) {
 			// arrange
 			var (
-				conn, schema         = newSchema(t)
-				streamType           = testdata.StreamType()
-				count                = 10
-				storeStreamIDs       = uuid.V7At(time.Now(), count)
-				streamIDs            = testdata.StreamIDs(count)
-				token                = storeStreamIDs[count-1]
-				limit          int64 = 100
+				conn, schema       = newSchema(t)
+				streamType         = testdata.StreamType()
+				count              = 10
+				refs               = testdata.StreamReference(streamType, count)
+				token              = refs[count-1].StoreStreamID
+				limit        int64 = 100
 			)
 
-			for i, id := range storeStreamIDs {
-				if _, err := schema.InsertOutbox(t.Context(), conn, streamType, streamIDs[i], id, 1, 1, 1); err != nil {
+			for _, ref := range refs {
+				if _, err := schema.InsertOutbox(t.Context(), conn, streamType, ref.StreamID, ref.StoreStreamID, 1, 1, 1); err != nil {
 					t.Fatal(err)
 				}
 			}
 
 			// act
-			got, nextToken, err := schema.SelectStreamIDs(t.Context(), conn, streamType, token, limit)
+			got, err := schema.SelectStreamReferences(t.Context(), conn, streamType, token, limit)
 
 			// assert
 			assert.NoError(t, err)
-			assert.EqualSlice(t, nil, got)
-			assert.Equal(t, token, nextToken)
+			assertEqualRefsInRows(t, nil, got)
 		})
 	})
 
