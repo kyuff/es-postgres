@@ -59,7 +59,7 @@ func New(connector Connector, opts ...Option) (*Storage, error) {
 		return nil, err
 	}
 
-	valuer, err := leases.NewSupervisor(connector, schema, cfg.leasesOptions...)
+	valuer, err := leases.New(connector, schema, cfg.leasesOptions...)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ type Storage struct {
 	cfg        *Config
 	connector  Connector
 	schema     *database.Schema
-	leases     *leases.Supervisor
+	leases     *leases.Leases
 	reader     reader
 	writer     writer
 	reconciles []reconcilers.Reconciler

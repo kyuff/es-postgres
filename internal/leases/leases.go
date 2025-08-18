@@ -25,7 +25,7 @@ type Schema interface {
 	InsertLease(ctx context.Context, db dbtx.DBTX, vnode uint32, name string, ttl time.Duration, status string) error
 }
 
-type Supervisor struct {
+type Leases struct {
 	cfg       *Config
 	heartbeat Heartbeater
 	connector Connector
@@ -34,24 +34,24 @@ type Supervisor struct {
 	values []uint32
 }
 
-func NewSupervisor(connector Connector, schema Schema, opts ...Option) (*Supervisor, error) {
+func New(connector Connector, schema Schema, opts ...Option) (*Leases, error) {
 	cfg := applyOptions(DefaultOptions(), opts...)
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
 
-	return New(cfg, NewHeartbeat(cfg, schema), connector), nil
+	return NewLeases(cfg, NewHeartbeat(cfg, schema), connector), nil
 }
 
-func New(cfg *Config, heartbeat Heartbeater, connector Connector) *Supervisor {
-	return &Supervisor{
+func NewLeases(cfg *Config, heartbeat Heartbeater, connector Connector) *Leases {
+	return &Leases{
 		cfg:       cfg,
 		heartbeat: heartbeat,
 		connector: connector,
 	}
 }
 
-func (s *Supervisor) Values() []uint32 {
+func (s *Leases) Values() []uint32 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -59,7 +59,7 @@ func (s *Supervisor) Values() []uint32 {
 }
 
 // Start is blocking and keeps the Values up to date.
-func (s *Supervisor) Start(ctx context.Context) error {
+func (s *Leases) Start(ctx context.Context) error {
 	err := retry.Continue(ctx, s.cfg.HeartbeatInterval, 10, s.tick)
 	if err != nil {
 		return fmt.Errorf("supervisor failed: %w", err)
@@ -68,7 +68,7 @@ func (s *Supervisor) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *Supervisor) tick(ctx context.Context) error {
+func (s *Leases) tick(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, s.cfg.HeartbeatTimeout)
 	defer cancel()
 

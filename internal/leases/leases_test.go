@@ -13,7 +13,7 @@ import (
 	"github.com/kyuff/es-postgres/internal/leases"
 )
 
-func TestSupervisor(t *testing.T) {
+func TestLeases(t *testing.T) {
 	t.Run("fail with illegal option", func(t *testing.T) {
 		// arrange
 		var (
@@ -22,7 +22,7 @@ func TestSupervisor(t *testing.T) {
 		)
 
 		// act
-		_, err := leases.NewSupervisor(connector, schema, leases.WithRange(leases.Range{From: 220, To: 100}))
+		_, err := leases.New(connector, schema, leases.WithRange(leases.Range{From: 220, To: 100}))
 
 		// assert
 		assert.Error(t, err)
@@ -36,7 +36,7 @@ func TestSupervisor(t *testing.T) {
 		)
 
 		// act
-		supervisor, err := leases.NewSupervisor(connector, schema, leases.WithRange(leases.Range{From: 0, To: 100}))
+		supervisor, err := leases.New(connector, schema, leases.WithRange(leases.Range{From: 0, To: 100}))
 
 		// assert
 		assert.NoError(t, err)
@@ -50,7 +50,7 @@ func TestSupervisor(t *testing.T) {
 			connector   = &ConnectorMock{}
 			heartbeater = &HeartbeaterMock{}
 			cfg         = leases.DefaultOptions()
-			sut         = leases.New(cfg, heartbeater, connector)
+			sut         = leases.NewLeases(cfg, heartbeater, connector)
 
 			wg       = &sync.WaitGroup{}
 			expected = []uint32{1, 2, 3}
@@ -90,7 +90,7 @@ func TestSupervisor(t *testing.T) {
 			connector   = &ConnectorMock{}
 			heartbeater = &HeartbeaterMock{}
 			cfg         = leases.DefaultOptions()
-			sut         = leases.New(cfg, heartbeater, connector)
+			sut         = leases.NewLeases(cfg, heartbeater, connector)
 
 			wg       = &sync.WaitGroup{}
 			expected = []uint32{1, 2, 3}
@@ -133,7 +133,7 @@ func TestSupervisor(t *testing.T) {
 			connector   = &ConnectorMock{}
 			heartbeater = &HeartbeaterMock{}
 			cfg         = leases.DefaultOptions()
-			sut         = leases.New(cfg, heartbeater, connector)
+			sut         = leases.NewLeases(cfg, heartbeater, connector)
 
 			wg       = &sync.WaitGroup{}
 			expected = []uint32{1, 2, 3}
@@ -177,7 +177,7 @@ func TestSupervisor(t *testing.T) {
 			connector   = &ConnectorMock{}
 			heartbeater = &HeartbeaterMock{}
 			cfg         = leases.DefaultOptions()
-			sut         = leases.New(cfg, heartbeater, connector)
+			sut         = leases.NewLeases(cfg, heartbeater, connector)
 
 			wg = &sync.WaitGroup{}
 		)
