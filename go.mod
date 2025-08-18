@@ -4,7 +4,7 @@ go 1.24.5
 
 require (
 	github.com/jackc/pgx/v5 v5.7.5
-	github.com/kyuff/es v0.0.0-20250723073749-041fbb01392e
+	github.com/kyuff/es v0.0.0-20250817183709-fa7628ac82b1
 )
 
 require (

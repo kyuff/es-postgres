@@ -16,6 +16,7 @@ import (
 	"github.com/kyuff/es-postgres/internal/assert"
 	"github.com/kyuff/es-postgres/internal/database"
 	"github.com/kyuff/es-postgres/internal/seqs"
+	"github.com/kyuff/es-postgres/internal/testdata"
 	"github.com/kyuff/es-postgres/internal/uuid"
 )
 
@@ -242,16 +243,15 @@ func TestStorage(t *testing.T) {
 		})
 	})
 
-	t.Run("GetStreamIDs", func(t *testing.T) {
+	t.Run("GetStreamReferences", func(t *testing.T) {
 		t.Parallel()
 		t.Run("should read a list of stream ids", func(t *testing.T) {
 			// arrange
 			var (
-				storage        = newInstance(t)
-				streamType     = newStreamType()
-				count          = 10
-				streamIDs      = uuid.V7At(time.Now(), count)
-				storeStreamIDs = uuid.V7At(time.Now(), count)
+				storage    = newInstance(t)
+				streamType = newStreamType()
+				count      = 10
+				refs       = testdata.StreamReference(streamType, count)
 			)
 
 			assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
@@ -259,28 +259,27 @@ func TestStorage(t *testing.T) {
 			for i := range count {
 				assert.NoError(t, storage.Write(t.Context(), streamType, seqs.Seq2(newEvent(1, func(e *es.Event) {
 					e.StreamType = streamType
-					e.StreamID = streamIDs[i]
-					e.StoreStreamID = storeStreamIDs[i]
+					e.StreamID = refs[i].StreamID
+					e.StoreStreamID = refs[i].StoreStreamID
 				}))))
 			}
 
 			// act
-			got, token, err := storage.GetStreamIDs(t.Context(), streamType, "", 1000)
+			got := storage.GetStreamReferences(t.Context(), streamType, "", 1000)
 
 			// assert
-			assert.NoError(t, err)
-			assert.EqualSlice(t, streamIDs, got)
-			assert.Equal(t, storeStreamIDs[count-1], token)
+			assert.EqualSeq2(t, seqs.Seq2(refs...), got, func(expected, got assert.KeyValue[es.StreamReference, error]) bool {
+				return assert.Equal(t, expected.Key, got.Key)
+			})
 		})
 
 		t.Run("should read a list of stream ids filtered by token", func(t *testing.T) {
 			// arrange
 			var (
-				storage        = newInstance(t)
-				streamType     = newStreamType()
-				count          = 10
-				streamIDs      = uuid.V7At(time.Now(), count)
-				storeStreamIDs = uuid.V7At(time.Now(), count)
+				storage    = newInstance(t)
+				streamType = newStreamType()
+				count      = 10
+				refs       = testdata.StreamReference(streamType, count)
 			)
 
 			assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
@@ -288,28 +287,27 @@ func TestStorage(t *testing.T) {
 			for i := range count {
 				assert.NoError(t, storage.Write(t.Context(), streamType, seqs.Seq2(newEvent(1, func(e *es.Event) {
 					e.StreamType = streamType
-					e.StreamID = streamIDs[i]
-					e.StoreStreamID = storeStreamIDs[i]
+					e.StreamID = refs[i].StreamID
+					e.StoreStreamID = refs[i].StoreStreamID
 				}))))
 			}
 
 			// act
-			got, token, err := storage.GetStreamIDs(t.Context(), streamType, storeStreamIDs[4], 1000)
+			got := storage.GetStreamReferences(t.Context(), streamType, refs[4].StoreStreamID, 1000)
 
 			// assert
-			assert.NoError(t, err)
-			assert.EqualSlice(t, streamIDs[5:], got)
-			assert.Equal(t, storeStreamIDs[count-1], token)
+			assert.EqualSeq2(t, seqs.Seq2(refs[5:]...), got, func(expected, got assert.KeyValue[es.StreamReference, error]) bool {
+				return assert.Equal(t, expected.Key, got.Key)
+			})
 		})
 
 		t.Run("should return next token when reading list of stream ids", func(t *testing.T) {
 			// arrange
 			var (
-				storage        = newInstance(t)
-				streamType     = newStreamType()
-				count          = 10
-				streamIDs      = uuid.V7At(time.Now(), count)
-				storeStreamIDs = uuid.V7At(time.Now(), count)
+				storage    = newInstance(t)
+				streamType = newStreamType()
+				count      = 10
+				refs       = testdata.StreamReference(streamType, count)
 			)
 
 			assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
@@ -317,29 +315,28 @@ func TestStorage(t *testing.T) {
 			for i := range count {
 				assert.NoError(t, storage.Write(t.Context(), streamType, seqs.Seq2(newEvent(1, func(e *es.Event) {
 					e.StreamType = streamType
-					e.StreamID = streamIDs[i]
-					e.StoreStreamID = storeStreamIDs[i]
+					e.StreamID = refs[i].StreamID
+					e.StoreStreamID = refs[i].StoreStreamID
 				}))))
 			}
 
 			// act
-			got, token, err := storage.GetStreamIDs(t.Context(), streamType, "", 4)
+			got := storage.GetStreamReferences(t.Context(), streamType, "", 4)
 
 			// assert
-			assert.NoError(t, err)
-			assert.EqualSlice(t, streamIDs[0:4], got)
-			assert.Equal(t, storeStreamIDs[3], token)
+			assert.EqualSeq2(t, seqs.Seq2(refs[:4]...), got, func(expected, got assert.KeyValue[es.StreamReference, error]) bool {
+				return assert.Equal(t, expected.Key, got.Key)
+			})
 		})
 
-		t.Run("should return same token empty list of stream ids", func(t *testing.T) {
+		t.Run("should return empty token when outside range", func(t *testing.T) {
 			// arrange
 			var (
-				storage        = newInstance(t)
-				streamType     = newStreamType()
-				count          = 10
-				streamIDs      = uuid.V7At(time.Now(), count)
-				storeStreamIDs = uuid.V7At(time.Now(), count)
-				token          = uuid.V7AtTime(time.Now().Add(time.Hour))
+				storage    = newInstance(t)
+				streamType = newStreamType()
+				count      = 10
+				token      = uuid.V7AtTime(time.Now().Add(time.Hour))
+				refs       = testdata.StreamReference(streamType, count)
 			)
 
 			assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
@@ -347,18 +344,18 @@ func TestStorage(t *testing.T) {
 			for i := range count {
 				assert.NoError(t, storage.Write(t.Context(), streamType, seqs.Seq2(newEvent(1, func(e *es.Event) {
 					e.StreamType = streamType
-					e.StreamID = streamIDs[i]
-					e.StoreStreamID = storeStreamIDs[i]
+					e.StreamID = refs[i].StreamID
+					e.StoreStreamID = refs[i].StoreStreamID
 				}))))
 			}
 
 			// act
-			got, nextToken, err := storage.GetStreamIDs(t.Context(), streamType, token, 4)
+			got := storage.GetStreamReferences(t.Context(), streamType, token, 4)
 
 			// assert
-			assert.NoError(t, err)
-			assert.EqualSlice(t, []string{}, got)
-			assert.Equal(t, token, nextToken)
+			assert.EqualSeq2(t, seqs.EmptySeq2[es.StreamReference, error](), got, func(expected, got assert.KeyValue[es.StreamReference, error]) bool {
+				return assert.Equal(t, expected.Key, got.Key)
+			})
 		})
 	})
 

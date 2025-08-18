@@ -11,6 +11,8 @@ github.com/jackc/puddle/v2 v2.2.2 h1:PR8nw+E/1w0GLuRFSmiioY6UooMp6KJv0/61nB7icHo
 github.com/jackc/puddle/v2 v2.2.2/go.mod h1:vriiEXHvEE654aYKXXjOvZM39qJ0q+azkZFrfEOc3H4=
 github.com/kyuff/es v0.0.0-20250723073749-041fbb01392e h1:zJCO/DaYYae0375ia7GgcrRd1n6CNZFBheqLxyu337E=
 github.com/kyuff/es v0.0.0-20250723073749-041fbb01392e/go.mod h1:oChimOz33uFf0fEF7Ag8q2oH4qCc65sHJ2BjKDZ642A=
+github.com/kyuff/es v0.0.0-20250817183709-fa7628ac82b1 h1:KulyMMWFPp03u2nb4bHn3pi+Mm4UaCFXu4fABTzIoAg=
+github.com/kyuff/es v0.0.0-20250817183709-fa7628ac82b1/go.mod h1:oChimOz33uFf0fEF7Ag8q2oH4qCc65sHJ2BjKDZ642A=
 github.com/matryer/moq v0.5.3 h1:4femQCFmBUwFPYs8VfM5ID7AI67/DTEDRBbTtSWy7GU=
 github.com/matryer/moq v0.5.3/go.mod h1:8288Qkw7gMZhUP3cIN86GG7g5p9jRuZH8biXLW4RXvQ=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=

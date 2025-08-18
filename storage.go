@@ -87,6 +87,8 @@ func New(connector Connector, opts ...Option) (*Storage, error) {
 	}, nil
 }
 
+var _ es.Storage = (*Storage)(nil)
+
 type Storage struct {
 	cfg        *Config
 	connector  Connector
@@ -146,23 +148,39 @@ func (s *Storage) Register(streamType string, types ...es.Content) error {
 	return s.cfg.codec.Register(streamType, types...)
 }
 
-func (s *Storage) GetStreamIDs(ctx context.Context, streamType string, storeStreamID string, limit int64) ([]string, string, error) {
-	db, err := s.connector.AcquireRead(ctx)
-	if err != nil {
-		return nil, "", fmt.Errorf("[es/postgres] Failed to acquire read connection: %w", err)
-	}
-	defer db.Release()
+func (s *Storage) GetStreamReferences(ctx context.Context, streamType string, storeStreamID string, limit int64) iter.Seq2[es.StreamReference, error] {
+	return func(yield func(es.StreamReference, error) bool) {
+		db, err := s.connector.AcquireRead(ctx)
+		if err != nil {
+			yield(es.StreamReference{}, fmt.Errorf("[es/postgres] Failed to acquire read connection: %w", err))
+			return
+		}
+		defer db.Release()
 
-	if strings.TrimSpace(storeStreamID) == "" {
-		storeStreamID = uuid.Empty
-	}
+		if strings.TrimSpace(storeStreamID) == "" {
+			storeStreamID = uuid.Empty
+		}
 
-	streamIDs, nextToken, err := s.schema.SelectStreamIDs(ctx, db, streamType, storeStreamID, limit)
-	if err != nil {
-		return nil, "", fmt.Errorf("[es/postgres] Failed to read store stream ids: %w", err)
-	}
+		rows, err := s.schema.SelectStreamReferences(ctx, db, streamType, storeStreamID, limit)
+		if err != nil {
+			yield(es.StreamReference{}, fmt.Errorf("[es/postgres] Failed to read stream references: %w", err))
+			return
+		}
 
-	return streamIDs, nextToken, nil
+		for rows.Next() {
+			var ref es.StreamReference
+			err = rows.Scan(&ref.StreamType, &ref.StreamID, &ref.StoreStreamID)
+			if err != nil {
+				yield(es.StreamReference{}, fmt.Errorf("[es/postgres] Failed to scan stream references: %w", err))
+				return
+			}
+
+			if !yield(ref, nil) {
+				return
+			}
+		}
+
+	}
 }
 
 func (s *Storage) Close() error {

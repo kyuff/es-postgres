@@ -27,7 +27,7 @@ type sqlQueries struct {
 	writeEvent             string
 	insertOutbox           string
 	updateOutbox           string
-	selectStreamIDs        string
+	selectStreamReferences string
 	selectOutboxStreamIDs  string
 	selectOutboxWatermark  string
 	updateOutboxWatermark  string
@@ -51,7 +51,7 @@ func NewSchema(prefix string) (*Schema, error) {
 			&sql.writeEvent,
 			&sql.insertOutbox,
 			&sql.updateOutbox,
-			&sql.selectStreamIDs,
+			&sql.selectStreamReferences,
 			&sql.selectOutboxStreamIDs,
 			&sql.selectOutboxWatermark,
 			&sql.updateOutboxWatermark,
@@ -261,8 +261,8 @@ func (s *Schema) UpdateOutbox(ctx context.Context, tx dbtx.DBTX, streamType, str
 }
 
 func init() {
-	sql.selectStreamIDs = `
-SELECT stream_id, store_stream_id
+	sql.selectStreamReferences = `
+SELECT stream_type, stream_id, store_stream_id
 FROM {{ .Prefix }}_outbox
 WHERE store_stream_id > $1
   AND stream_type = $2
@@ -270,32 +270,8 @@ ORDER BY store_stream_id ASC
 LIMIT $3;`
 }
 
-func (s *Schema) SelectStreamIDs(ctx context.Context, db dbtx.DBTX, streamType string, token string, limit int64) ([]string, string, error) {
-	if token == "" {
-		token = uuid.Empty
-	}
-	rows, err := db.Query(ctx, sql.selectStreamIDs, token, streamType, limit)
-	if err != nil {
-		return nil, "", err
-	}
-
-	var result []string
-	var nextToken = ""
-	for rows.Next() {
-		var streamID string
-		err = rows.Scan(&streamID, &nextToken)
-		if err != nil {
-			return nil, "", err
-		}
-
-		result = append(result, streamID)
-	}
-
-	if len(result) == 0 {
-		nextToken = token
-	}
-
-	return result, nextToken, nil
+func (s *Schema) SelectStreamReferences(ctx context.Context, db dbtx.DBTX, streamType string, token string, limit int64) (pgx.Rows, error) {
+	return db.Query(ctx, sql.selectStreamReferences, token, streamType, limit)
 }
 
 func init() {
