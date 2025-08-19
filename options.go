@@ -25,6 +25,7 @@ type Config struct {
 	tablePrefix         string
 	codec               codec
 	partitioner         func(streamType, streamID string) uint32
+	listenPublishing    bool
 	reconcilePublishing bool
 	reconcileInterval   time.Duration
 	reconcileTimeout    time.Duration
@@ -44,6 +45,7 @@ func defaultOptions() *Config {
 		WithReconcileTimeout(time.Second*5),
 		WithProcessTimeout(time.Second*3),
 		WithLinearProcessBackoff(time.Second),
+		WithListenPublishing(true),
 		WithReconcilePublishing(true),
 		WithFNVPartitioner(defaultPartitionCount),
 		withLeaseRange(0, defaultPartitionCount),
@@ -204,6 +206,13 @@ func WithExponentialProcessBackoff(base time.Duration) Option {
 	return WithProcessBackoff(func(_ string, retries int64) time.Duration {
 		return backoff.Exponential(base, retries)
 	})
+}
+
+// WithListenPublishing enables publishing by the Postgres LISTEN/NOTIFY mechanism.
+func WithListenPublishing(enabled bool) Option {
+	return func(cfg *Config) {
+		cfg.listenPublishing = enabled
+	}
 }
 
 // WithReconcilePublishing enables publishing by a periodic reconciler.

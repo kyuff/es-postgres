@@ -25,6 +25,16 @@ type Schema interface {
 	InsertLease(ctx context.Context, db dbtx.DBTX, vnode uint32, name string, ttl time.Duration, status string) error
 }
 
+type ValueListener interface {
+	ValuesChanged(ctx context.Context, added, removed []uint32) error
+}
+
+type ValueListenerFunc func(ctx context.Context, added, removed []uint32) error
+
+func (fn ValueListenerFunc) ValuesChanged(ctx context.Context, added, removed []uint32) error {
+	return fn(ctx, added, removed)
+}
+
 type Leases struct {
 	cfg       *Config
 	heartbeat Heartbeater
@@ -56,6 +66,10 @@ func (s *Leases) Values() []uint32 {
 	defer s.mu.RUnlock()
 
 	return s.values
+}
+
+func (s *Leases) OnChange(fn func(ctx context.Context, add, remove []uint32) error) {
+	panic("implement me")
 }
 
 // Start is blocking and keeps the Values up to date.
