@@ -68,10 +68,6 @@ func (s *Leases) Values() []uint32 {
 	return s.values
 }
 
-func (s *Leases) OnChange(fn func(ctx context.Context, add, remove []uint32) error) {
-	panic("implement me")
-}
-
 // Start is blocking and keeps the Values up to date.
 func (s *Leases) Start(ctx context.Context) error {
 	err := retry.Continue(ctx, s.cfg.HeartbeatInterval, 10, s.tick)
@@ -100,7 +96,11 @@ func (s *Leases) tick(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	added, removed := diff(s.values, values)
 	s.values = values
+	if len(added) == 0 && len(removed) == 0 {
+		return nil
+	}
 
-	return nil
+	return s.cfg.listener.ValuesChanged(ctx, added, removed)
 }
