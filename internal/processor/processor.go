@@ -19,7 +19,7 @@ func New(connector Connector, schema Schema, w es.Writer, rd Reader, backoff fun
 		rd:        rd,
 		backoff:   backoff,
 
-		single: singleflight.New[database.Stream](),
+		single: singleflight.New[es.StreamReference](),
 	}
 }
 
@@ -30,10 +30,10 @@ type Processor struct {
 	schema    Schema
 	rd        Reader
 
-	single *singleflight.Group[database.Stream]
+	single *singleflight.Group[es.StreamReference]
 }
 
-func (p *Processor) Process(ctx context.Context, stream database.Stream) (err error) {
+func (p *Processor) Process(ctx context.Context, stream es.StreamReference) (err error) {
 	defer func() {
 		if m := recover(); m != nil {
 			err = errors.Join(err, fmt.Errorf("panic: %v", m))
@@ -42,8 +42,8 @@ func (p *Processor) Process(ctx context.Context, stream database.Stream) (err er
 
 	var writeErr error
 	var tryErr = p.single.TryDo(stream, func() error {
-		return p.w.Write(ctx, stream.Type, func(yield func(es.Event, error) bool) {
-			db, err := p.connector.AcquireWriteStream(ctx, stream.Type, stream.StoreID)
+		return p.w.Write(ctx, stream.StreamType, func(yield func(es.Event, error) bool) {
+			db, err := p.connector.AcquireWriteStream(ctx, stream.StreamType, stream.StoreStreamID)
 			if err != nil {
 				writeErr = fmt.Errorf("[es/postgres] Failed to acquire write connection: %w", err)
 				return
@@ -67,7 +67,7 @@ func (p *Processor) Process(ctx context.Context, stream database.Stream) (err er
 				delay      time.Duration
 			)
 
-			for event, err := range p.rd.Read(ctx, stream.Type, work.StreamID, watermark) {
+			for event, err := range p.rd.Read(ctx, stream.StreamType, work.StreamID, watermark) {
 				if err != nil {
 					yield(event, err)
 					break
@@ -83,7 +83,7 @@ func (p *Processor) Process(ctx context.Context, stream database.Stream) (err er
 			if watermark < eventNumber {
 				// failed to raise the watermark
 				retryCount++
-				delay = p.backoff(stream.Type, retryCount)
+				delay = p.backoff(stream.StreamType, retryCount)
 				watermark = work.Watermark
 			}
 

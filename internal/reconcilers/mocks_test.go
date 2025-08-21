@@ -5,13 +5,12 @@ package reconcilers_test
 
 import (
 	"context"
-	"sync"
-	"time"
-
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/kyuff/es-postgres/internal/database"
+	"github.com/kyuff/es"
 	"github.com/kyuff/es-postgres/internal/dbtx"
 	"github.com/kyuff/es-postgres/internal/reconcilers"
+	"sync"
+	"time"
 )
 
 // Ensure, that ValuerMock does implement reconcilers.Valuer.
@@ -149,7 +148,7 @@ var _ reconcilers.Schema = &SchemaMock{}
 //
 //		// make and configure a mocked reconcilers.Schema
 //		mockedSchema := &SchemaMock{
-//			SelectOutboxStreamIDsFunc: func(ctx context.Context, db database.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]database.Stream, error) {
+//			SelectOutboxStreamIDsFunc: func(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]es.StreamReference, error) {
 //				panic("mock out the SelectOutboxStreamIDs method")
 //			},
 //		}
@@ -160,7 +159,7 @@ var _ reconcilers.Schema = &SchemaMock{}
 //	}
 type SchemaMock struct {
 	// SelectOutboxStreamIDsFunc mocks the SelectOutboxStreamIDs method.
-	SelectOutboxStreamIDsFunc func(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]database.Stream, error)
+	SelectOutboxStreamIDsFunc func(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]es.StreamReference, error)
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -184,7 +183,7 @@ type SchemaMock struct {
 }
 
 // SelectOutboxStreamIDs calls SelectOutboxStreamIDsFunc.
-func (mock *SchemaMock) SelectOutboxStreamIDs(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]database.Stream, error) {
+func (mock *SchemaMock) SelectOutboxStreamIDs(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]es.StreamReference, error) {
 	if mock.SelectOutboxStreamIDsFunc == nil {
 		panic("SchemaMock.SelectOutboxStreamIDsFunc: method is nil but Schema.SelectOutboxStreamIDs was just called")
 	}
@@ -245,7 +244,7 @@ var _ reconcilers.Processor = &ProcessorMock{}
 //
 //		// make and configure a mocked reconcilers.Processor
 //		mockedProcessor := &ProcessorMock{
-//			ProcessFunc: func(ctx context.Context, stream database.Stream) error {
+//			ProcessFunc: func(ctx context.Context, stream es.StreamReference) error {
 //				panic("mock out the Process method")
 //			},
 //		}
@@ -256,7 +255,7 @@ var _ reconcilers.Processor = &ProcessorMock{}
 //	}
 type ProcessorMock struct {
 	// ProcessFunc mocks the Process method.
-	ProcessFunc func(ctx context.Context, stream database.Stream) error
+	ProcessFunc func(ctx context.Context, stream es.StreamReference) error
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -265,20 +264,20 @@ type ProcessorMock struct {
 			// Ctx is the ctx argument value.
 			Ctx context.Context
 			// Stream is the stream argument value.
-			Stream database.Stream
+			Stream es.StreamReference
 		}
 	}
 	lockProcess sync.RWMutex
 }
 
 // Process calls ProcessFunc.
-func (mock *ProcessorMock) Process(ctx context.Context, stream database.Stream) error {
+func (mock *ProcessorMock) Process(ctx context.Context, stream es.StreamReference) error {
 	if mock.ProcessFunc == nil {
 		panic("ProcessorMock.ProcessFunc: method is nil but Processor.Process was just called")
 	}
 	callInfo := struct {
 		Ctx    context.Context
-		Stream database.Stream
+		Stream es.StreamReference
 	}{
 		Ctx:    ctx,
 		Stream: stream,
@@ -295,11 +294,11 @@ func (mock *ProcessorMock) Process(ctx context.Context, stream database.Stream) 
 //	len(mockedProcessor.ProcessCalls())
 func (mock *ProcessorMock) ProcessCalls() []struct {
 	Ctx    context.Context
-	Stream database.Stream
+	Stream es.StreamReference
 } {
 	var calls []struct {
 		Ctx    context.Context
-		Stream database.Stream
+		Stream es.StreamReference
 	}
 	mock.lockProcess.RLock()
 	calls = mock.calls.Process

@@ -251,7 +251,7 @@ func TestStorage(t *testing.T) {
 				storage    = newInstance(t)
 				streamType = newStreamType()
 				count      = 10
-				refs       = testdata.StreamReference(streamType, count)
+				refs       = testdata.StreamReferences(streamType, count)
 			)
 
 			assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
@@ -279,7 +279,7 @@ func TestStorage(t *testing.T) {
 				storage    = newInstance(t)
 				streamType = newStreamType()
 				count      = 10
-				refs       = testdata.StreamReference(streamType, count)
+				refs       = testdata.StreamReferences(streamType, count)
 			)
 
 			assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
@@ -307,7 +307,7 @@ func TestStorage(t *testing.T) {
 				storage    = newInstance(t)
 				streamType = newStreamType()
 				count      = 10
-				refs       = testdata.StreamReference(streamType, count)
+				refs       = testdata.StreamReferences(streamType, count)
 			)
 
 			assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))
@@ -336,7 +336,7 @@ func TestStorage(t *testing.T) {
 				streamType = newStreamType()
 				count      = 10
 				token      = uuid.V7AtTime(time.Now().Add(time.Hour))
-				refs       = testdata.StreamReference(streamType, count)
+				refs       = testdata.StreamReferences(streamType, count)
 			)
 
 			assert.NoError(t, storage.Register(streamType, EventA{}, EventB{}))

@@ -5,13 +5,12 @@ package eventsio_test
 
 import (
 	"context"
-	"iter"
-	"sync"
-
 	"github.com/jackc/pgx/v5"
 	"github.com/kyuff/es"
 	"github.com/kyuff/es-postgres/internal/dbtx"
 	"github.com/kyuff/es-postgres/internal/eventsio"
+	"iter"
+	"sync"
 )
 
 // Ensure, that SchemaMock does implement eventsio.Schema.
@@ -24,16 +23,16 @@ var _ eventsio.Schema = &SchemaMock{}
 //
 //		// make and configure a mocked eventsio.Schema
 //		mockedSchema := &SchemaMock{
-//			InsertOutboxFunc: func(ctx context.Context, tx database.DBTX, streamType string, streamID string, storeStreamID string, eventNumber int64, watermark int64, partition uint32) (int64, error) {
+//			InsertOutboxFunc: func(ctx context.Context, tx dbtx.DBTX, streamType string, streamID string, storeStreamID string, eventNumber int64, watermark int64, partition uint32) (int64, error) {
 //				panic("mock out the InsertOutbox method")
 //			},
-//			SelectEventsFunc: func(ctx context.Context, db database.DBTX, streamType string, streamID string, eventNumber int64) (pgx.Rows, error) {
+//			SelectEventsFunc: func(ctx context.Context, db dbtx.DBTX, streamType string, streamID string, eventNumber int64) (pgx.Rows, error) {
 //				panic("mock out the SelectEvents method")
 //			},
-//			UpdateOutboxFunc: func(ctx context.Context, tx database.DBTX, streamType string, streamID string, eventNumber int64, lastEventNumber int64) (int64, error) {
+//			UpdateOutboxFunc: func(ctx context.Context, tx dbtx.DBTX, streamType string, streamID string, eventNumber int64, lastEventNumber int64) (int64, error) {
 //				panic("mock out the UpdateOutbox method")
 //			},
-//			WriteEventFunc: func(ctx context.Context, db database.DBTX, event es.Event, content []byte, metadata []byte) error {
+//			WriteEventFunc: func(ctx context.Context, db dbtx.DBTX, event es.Event, content []byte, metadata []byte) error {
 //				panic("mock out the WriteEvent method")
 //			},
 //		}

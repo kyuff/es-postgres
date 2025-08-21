@@ -7,11 +7,12 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/kyuff/es"
 	"github.com/kyuff/es-postgres/internal/assert"
-	"github.com/kyuff/es-postgres/internal/database"
 	"github.com/kyuff/es-postgres/internal/dbtx"
 	"github.com/kyuff/es-postgres/internal/logger"
 	"github.com/kyuff/es-postgres/internal/reconcilers"
+	"github.com/kyuff/es-postgres/internal/testdata"
 	"github.com/kyuff/es-postgres/internal/uuid"
 )
 
@@ -25,36 +26,24 @@ func TestPeriodic(t *testing.T) {
 		newPeriodic = func(c reconcilers.Connector, s reconcilers.Schema, v reconcilers.Valuer) *reconcilers.Periodic {
 			return reconcilers.NewPeriodic(logger.Noop{}, c, s, v, defaultInterval, defaultTimeout, defaultProcessTimeout)
 		}
-		newStream = func() database.Stream {
-			return database.Stream{
-				StoreID: uuid.V7(),
-				Type:    uuid.V7(),
-			}
-		}
-		newStreams = func(n int) []database.Stream {
-			var streams []database.Stream
-			for range n {
-				streams = append(streams, newStream())
-			}
-			return streams
-		}
 	)
 
 	t.Run("process all in a single reconcile", func(t *testing.T) {
 		// arrange
 		var (
-			c       = &ConnectorMock{}
-			s       = &SchemaMock{}
-			v       = &ValuerMock{}
-			p       = &ProcessorMock{}
-			sut     = newPeriodic(c, s, v)
-			streams = newStreams(10)
+			c          = &ConnectorMock{}
+			s          = &SchemaMock{}
+			v          = &ValuerMock{}
+			p          = &ProcessorMock{}
+			sut        = newPeriodic(c, s, v)
+			streamType = testdata.StreamType()
+			streams    = testdata.StreamReferences(streamType, 10)
 		)
 
 		c.AcquireReadFunc = func(ctx context.Context) (*pgxpool.Conn, error) {
 			return &pgxpool.Conn{}, nil
 		}
-		s.SelectOutboxStreamIDsFunc = func(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]database.Stream, error) {
+		s.SelectOutboxStreamIDsFunc = func(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]es.StreamReference, error) {
 			if len(s.SelectOutboxStreamIDsCalls()) > 1 {
 				return nil, nil
 			}
@@ -63,7 +52,7 @@ func TestPeriodic(t *testing.T) {
 		v.ValuesFunc = func() []uint32 {
 			return []uint32{1, 2, 3}
 		}
-		p.ProcessFunc = func(ctx context.Context, stream database.Stream) error {
+		p.ProcessFunc = func(ctx context.Context, stream es.StreamReference) error {
 			return nil
 		}
 
@@ -94,24 +83,25 @@ func TestPeriodic(t *testing.T) {
 			p             = &ProcessorMock{}
 			sut           = newPeriodic(c, s, v)
 			expectedToken = uuid.Empty
+			streamType    = testdata.StreamType()
+			streams       = testdata.StreamReferences(streamType, 100)
 		)
 
 		c.AcquireReadFunc = func(ctx context.Context) (*pgxpool.Conn, error) {
 			return &pgxpool.Conn{}, nil
 		}
-		s.SelectOutboxStreamIDsFunc = func(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]database.Stream, error) {
+		s.SelectOutboxStreamIDsFunc = func(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]es.StreamReference, error) {
 			if len(s.SelectOutboxStreamIDsCalls()) > 5 {
 				return nil, nil
 			}
 			assert.Equal(t, expectedToken, token)
-			streams := newStreams(limit)
-			expectedToken = streams[limit-1].StoreID
+			expectedToken = streams[limit-1].StoreStreamID
 			return streams, nil
 		}
 		v.ValuesFunc = func() []uint32 {
 			return []uint32{1, 2, 3}
 		}
-		p.ProcessFunc = func(ctx context.Context, stream database.Stream) error {
+		p.ProcessFunc = func(ctx context.Context, stream es.StreamReference) error {
 			return nil
 		}
 
@@ -143,18 +133,20 @@ func TestPeriodic(t *testing.T) {
 			v           = &ValuerMock{}
 			p           = &ProcessorMock{}
 			sut         = newPeriodic(c, s, v)
+			streamType  = testdata.StreamType()
+			streams     = testdata.StreamReferences(streamType, 1)
 		)
 
 		c.AcquireReadFunc = func(ctx context.Context) (*pgxpool.Conn, error) {
 			return &pgxpool.Conn{}, nil
 		}
-		s.SelectOutboxStreamIDsFunc = func(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]database.Stream, error) {
-			return newStreams(1), nil
+		s.SelectOutboxStreamIDsFunc = func(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]es.StreamReference, error) {
+			return streams, nil
 		}
 		v.ValuesFunc = func() []uint32 {
 			return []uint32{1, 2, 3}
 		}
-		p.ProcessFunc = func(ctx context.Context, stream database.Stream) error {
+		p.ProcessFunc = func(ctx context.Context, stream es.StreamReference) error {
 			if len(p.ProcessCalls()) == 10 {
 				cancel()
 			}
@@ -172,23 +164,25 @@ func TestPeriodic(t *testing.T) {
 	t.Run("exit with repeated failures from connector", func(t *testing.T) {
 		// arrange
 		var (
-			c   = &ConnectorMock{}
-			s   = &SchemaMock{}
-			v   = &ValuerMock{}
-			p   = &ProcessorMock{}
-			sut = newPeriodic(c, s, v)
+			c          = &ConnectorMock{}
+			s          = &SchemaMock{}
+			v          = &ValuerMock{}
+			p          = &ProcessorMock{}
+			sut        = newPeriodic(c, s, v)
+			streamType = testdata.StreamType()
+			streams    = testdata.StreamReferences(streamType, 1)
 		)
 
 		c.AcquireReadFunc = func(ctx context.Context) (*pgxpool.Conn, error) {
 			return nil, errors.New("fail")
 		}
-		s.SelectOutboxStreamIDsFunc = func(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]database.Stream, error) {
-			return newStreams(1), nil
+		s.SelectOutboxStreamIDsFunc = func(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]es.StreamReference, error) {
+			return streams, nil
 		}
 		v.ValuesFunc = func() []uint32 {
 			return []uint32{1, 2, 3}
 		}
-		p.ProcessFunc = func(ctx context.Context, stream database.Stream) error {
+		p.ProcessFunc = func(ctx context.Context, stream es.StreamReference) error {
 			return nil
 		}
 
@@ -213,13 +207,13 @@ func TestPeriodic(t *testing.T) {
 		c.AcquireReadFunc = func(ctx context.Context) (*pgxpool.Conn, error) {
 			return &pgxpool.Conn{}, nil
 		}
-		s.SelectOutboxStreamIDsFunc = func(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]database.Stream, error) {
+		s.SelectOutboxStreamIDsFunc = func(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]es.StreamReference, error) {
 			return nil, errors.New("fail")
 		}
 		v.ValuesFunc = func() []uint32 {
 			return []uint32{1, 2, 3}
 		}
-		p.ProcessFunc = func(ctx context.Context, stream database.Stream) error {
+		p.ProcessFunc = func(ctx context.Context, stream es.StreamReference) error {
 			return nil
 		}
 

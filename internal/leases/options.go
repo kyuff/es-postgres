@@ -1,6 +1,7 @@
 package leases
 
 import (
+	"context"
 	"fmt"
 	"math/rand/v2"
 	"strings"
@@ -17,6 +18,7 @@ type Config struct {
 	HeartbeatInterval time.Duration
 	LeaseTTL          time.Duration
 	Rand              *rand.Rand
+	listener          ValueListener
 }
 
 func DefaultOptions() *Config {
@@ -27,6 +29,7 @@ func DefaultOptions() *Config {
 		WithHeartbeatInterval(2*time.Second),
 		WithLeaseTTL(3*time.Second),
 		WithRand(rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))),
+		WithValueListener(noopValueListener()),
 	) // add default options here
 
 }
@@ -60,6 +63,14 @@ func (cfg Config) validate() error {
 
 	if cfg.HeartbeatInterval == 0 {
 		return fmt.Errorf("leases: heartbeat interval must be greater than 0")
+	}
+
+	if cfg.Rand == nil {
+		return fmt.Errorf("leases: rand must not be nil")
+	}
+
+	if cfg.listener == nil {
+		return fmt.Errorf("leases: value listener must not be nil")
 	}
 
 	return nil
@@ -104,5 +115,17 @@ func WithRand(r *rand.Rand) Option {
 func WithLeaseTTL(ttl time.Duration) Option {
 	return func(cfg *Config) {
 		cfg.LeaseTTL = ttl
+	}
+}
+
+func WithValueListener(listener ValueListener) Option {
+	return func(cfg *Config) {
+		cfg.listener = listener
+	}
+}
+
+func noopValueListener() ValueListenerFunc {
+	return func(ctx context.Context, added, removed []uint32) error {
+		return nil
 	}
 }

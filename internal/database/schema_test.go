@@ -12,26 +12,12 @@ import (
 	"github.com/kyuff/es-postgres/internal/database"
 	"github.com/kyuff/es-postgres/internal/dbtx"
 	"github.com/kyuff/es-postgres/internal/testdata"
-	"github.com/kyuff/es-postgres/internal/uuid"
 )
 
 func TestSchema(t *testing.T) {
 	var (
 		newPartitions = func(partitions ...uint32) []uint32 {
 			return partitions
-		}
-		newStream = func(streamType string, storeStreamID string) database.Stream {
-			return database.Stream{
-				StoreID: storeStreamID,
-				Type:    streamType,
-			}
-		}
-		newStreams = func(streamType string, count int) []database.Stream {
-			var s []database.Stream
-			for _, storeStreamID := range uuid.V7At(time.Now(), count) {
-				s = append(s, newStream(streamType, storeStreamID))
-			}
-			return s
 		}
 		newSchema = func(t *testing.T) (*pgxpool.Pool, *database.Schema) {
 			dsn := database.DSNTest(t)
@@ -103,10 +89,9 @@ func TestSchema(t *testing.T) {
 			}
 			assert.Equalf(t, len(expected), n, "number of events")
 		}
-		insertOutbox = func(t *testing.T, conn dbtx.DBTX, schema *database.Schema, streams []database.Stream, eventNumber, watermark int64, partition uint32) {
-			streamIDs := testdata.StreamIDs(len(streams))
-			for i, stream := range streams {
-				if _, err := schema.InsertOutbox(t.Context(), conn, stream.Type, streamIDs[i], stream.StoreID, eventNumber, watermark, partition); err != nil {
+		insertOutbox = func(t *testing.T, conn dbtx.DBTX, schema *database.Schema, streams []es.StreamReference, eventNumber, watermark int64, partition uint32) {
+			for _, stream := range streams {
+				if _, err := schema.InsertOutbox(t.Context(), conn, stream.StreamType, stream.StreamID, stream.StoreStreamID, eventNumber, watermark, partition); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -358,7 +343,7 @@ func TestSchema(t *testing.T) {
 				conn, schema       = newSchema(t)
 				streamType         = testdata.StreamType()
 				count              = 10
-				refs               = testdata.StreamReference(streamType, count)
+				refs               = testdata.StreamReferences(streamType, count)
 				token              = ""
 				limit        int64 = 100
 			)
@@ -383,7 +368,7 @@ func TestSchema(t *testing.T) {
 				conn, schema       = newSchema(t)
 				streamType         = testdata.StreamType()
 				count              = 10
-				refs               = testdata.StreamReference(streamType, count)
+				refs               = testdata.StreamReferences(streamType, count)
 				token              = ""
 				limit        int64 = 5
 			)
@@ -408,7 +393,7 @@ func TestSchema(t *testing.T) {
 				conn, schema       = newSchema(t)
 				streamType         = testdata.StreamType()
 				count              = 10
-				refs               = testdata.StreamReference(streamType, count)
+				refs               = testdata.StreamReferences(streamType, count)
 				offset             = 4
 				token              = refs[offset-1].StoreStreamID
 				limit        int64 = 100
@@ -434,7 +419,7 @@ func TestSchema(t *testing.T) {
 				conn, schema       = newSchema(t)
 				streamType         = testdata.StreamType()
 				count              = 10
-				refs               = testdata.StreamReference(streamType, count)
+				refs               = testdata.StreamReferences(streamType, count)
 				token              = refs[count-1].StoreStreamID
 				limit        int64 = 100
 			)
@@ -461,7 +446,7 @@ func TestSchema(t *testing.T) {
 				conn, schema = newSchema(t)
 				streamType   = testdata.StreamType()
 				count        = 10
-				streams      = newStreams(streamType, count)
+				streams      = testdata.StreamReferences(streamType, count)
 				token        = ""
 				grace        = time.Millisecond * 0
 				partitions   = newPartitions(1)
@@ -484,8 +469,8 @@ func TestSchema(t *testing.T) {
 				conn, schema = newSchema(t)
 				streamType   = testdata.StreamType()
 				count        = 10
-				streams      = newStreams(streamType, count)
-				ignored      = newStreams(streamType, count)
+				streams      = testdata.StreamReferences(streamType, count)
+				ignored      = testdata.StreamReferences(streamType, count)
 				token        = ""
 				grace        = time.Millisecond * 0
 				partitions   = newPartitions(1)
@@ -509,8 +494,8 @@ func TestSchema(t *testing.T) {
 				conn, schema = newSchema(t)
 				streamType   = testdata.StreamType()
 				count        = 10
-				streams      = newStreams(streamType, count)
-				ignored      = newStreams(streamType, count)
+				streams      = testdata.StreamReferences(streamType, count)
+				ignored      = testdata.StreamReferences(streamType, count)
 				token        = ""
 				grace        = time.Millisecond * 0
 				partitions   = newPartitions(1, 2, 3)
@@ -534,7 +519,7 @@ func TestSchema(t *testing.T) {
 				conn, schema = newSchema(t)
 				streamType   = testdata.StreamType()
 				count        = 10
-				streams      = newStreams(streamType, count)
+				streams      = testdata.StreamReferences(streamType, count)
 				token        = ""
 				grace        = time.Millisecond * 0
 				partitions   = newPartitions(1)
@@ -557,9 +542,9 @@ func TestSchema(t *testing.T) {
 				conn, schema = newSchema(t)
 				streamType   = testdata.StreamType()
 				count        = 10
-				streams      = newStreams(streamType, count)
+				streams      = testdata.StreamReferences(streamType, count)
 				start        = 5
-				token        = streams[start-1].StoreID
+				token        = streams[start-1].StoreStreamID
 				grace        = time.Millisecond * 0
 				partitions   = newPartitions(1)
 				limit        = 100
@@ -581,7 +566,7 @@ func TestSchema(t *testing.T) {
 				conn, schema = newSchema(t)
 				streamType   = testdata.StreamType()
 				count        = 10
-				streams      = newStreams(streamType, count)
+				streams      = testdata.StreamReferences(streamType, count)
 				start        = 5
 				token        = ""
 				grace        = time.Millisecond * 100
@@ -617,14 +602,11 @@ func TestSchema(t *testing.T) {
 		t.Run("read watermark", func(t *testing.T) {
 			// arrange
 			var (
-				conn, schema  = newSchema(t)
-				streamType    = testdata.StreamType()
-				streamID      = testdata.StreamID()
-				storeStreamID = testdata.StoreStreamID()
-				stream        = newStream(streamType, storeStreamID)
+				conn, schema = newSchema(t)
+				stream       = testdata.StreamReference()
 			)
 
-			_, err := schema.InsertOutbox(t.Context(), conn, stream.Type, streamID, stream.StoreID, 300, 1, 42)
+			_, err := schema.InsertOutbox(t.Context(), conn, stream.StreamType, stream.StreamID, stream.StoreStreamID, 300, 1, 42)
 			assert.NoError(t, err)
 			assert.NoError(t, schema.UpdateOutboxWatermark(t.Context(), conn, stream, 0, database.OutboxWatermark{
 				Watermark:  1,
@@ -639,16 +621,14 @@ func TestSchema(t *testing.T) {
 			assert.Equalf(t, int64(1), watermark.Watermark, "Watermark")
 			assert.Equalf(t, int64(20), watermark.RetryCount, "RetryCount")
 			assert.Equalf(t, int64(300), eventNumber, "eventNumber")
-			assert.Equalf(t, streamID, watermark.StreamID, "StreamID")
+			assert.Equalf(t, stream.StreamID, watermark.StreamID, "StreamID")
 		})
 
 		t.Run("fail with no stream", func(t *testing.T) {
 			// arrange
 			var (
-				conn, schema  = newSchema(t)
-				streamType    = testdata.StreamType()
-				storeStreamID = testdata.StoreStreamID()
-				stream        = newStream(streamType, storeStreamID)
+				conn, schema = newSchema(t)
+				stream       = testdata.StreamReference()
 			)
 			// act
 			_, _, err := schema.SelectOutboxWatermark(t.Context(), conn, stream)
@@ -666,11 +646,14 @@ func TestSchema(t *testing.T) {
 				streamType    = testdata.StreamType()
 				streamID      = testdata.StreamID()
 				storeStreamID = testdata.StoreStreamID()
-				stream        = newStream(streamType, storeStreamID)
-				delay         = time.Millisecond
+				stream        = testdata.StreamReference(func(ref *es.StreamReference) {
+					ref.StreamType = streamType
+					ref.StreamID = storeStreamID
+				})
+				delay = time.Millisecond
 			)
 
-			_, err := schema.InsertOutbox(t.Context(), conn, stream.Type, streamID, stream.StoreID, 300, 1, 42)
+			_, err := schema.InsertOutbox(t.Context(), conn, stream.StreamType, streamID, stream.StoreStreamID, 300, 1, 42)
 			assert.NoError(t, err)
 
 			// act
@@ -686,14 +669,13 @@ func TestSchema(t *testing.T) {
 			assert.Equalf(t, 10, got.Watermark, "Watermark")
 			assert.Equalf(t, 20, got.RetryCount, "RetryCount")
 		})
+
 		t.Run("fail on missing stream", func(t *testing.T) {
 			// arrange
 			var (
-				conn, schema  = newSchema(t)
-				streamType    = testdata.StreamType()
-				storeStreamID = testdata.StoreStreamID()
-				stream        = newStream(streamType, storeStreamID)
-				delay         = time.Millisecond
+				conn, schema = newSchema(t)
+				stream       = testdata.StreamReference()
+				delay        = time.Millisecond
 			)
 
 			// act

@@ -59,31 +59,38 @@ func New(connector Connector, opts ...Option) (*Storage, error) {
 		return nil, err
 	}
 
-	valuer, err := leases.NewSupervisor(connector, schema, cfg.leasesOptions...)
+	var recons []reconcilers.Reconciler
+	if cfg.listenPublishing {
+		var listener = reconcilers.NewListener()
+		cfg.leasesOptions = append(cfg.leasesOptions, leases.WithValueListener(listener))
+		recons = append(recons, listener)
+	}
+
+	valuer, err := leases.New(connector, schema, cfg.leasesOptions...)
 	if err != nil {
 		return nil, err
 	}
 
+	if cfg.reconcilePublishing {
+		recons = append(recons, reconcilers.NewPeriodic(
+			cfg.logger,
+			connector,
+			schema,
+			valuer,
+			cfg.reconcileInterval,
+			cfg.reconcileTimeout,
+			cfg.processTimeout,
+		))
+	}
+
 	return &Storage{
-		cfg:       cfg,
-		connector: connector,
-		schema:    schema,
-		leases:    valuer,
-		reader:    eventsio.NewReader(connector, schema, cfg.codec),
-		writer:    eventsio.NewWriter(schema, eventsio.NewValidator(), cfg.codec, cfg.partitioner),
-		reconciles: []reconcilers.Reconciler{
-			reconcilers.FeatureFlag(cfg.reconcilePublishing,
-				reconcilers.NewPeriodic(
-					cfg.logger,
-					connector,
-					schema,
-					valuer,
-					cfg.reconcileInterval,
-					cfg.reconcileTimeout,
-					cfg.processTimeout,
-				),
-			),
-		},
+		cfg:        cfg,
+		connector:  connector,
+		schema:     schema,
+		leases:     valuer,
+		reader:     eventsio.NewReader(connector, schema, cfg.codec),
+		writer:     eventsio.NewWriter(schema, eventsio.NewValidator(), cfg.codec, cfg.partitioner),
+		reconciles: recons,
 	}, nil
 }
 
@@ -93,7 +100,7 @@ type Storage struct {
 	cfg        *Config
 	connector  Connector
 	schema     *database.Schema
-	leases     *leases.Supervisor
+	leases     *leases.Leases
 	reader     reader
 	writer     writer
 	reconciles []reconcilers.Reconciler

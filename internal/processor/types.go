@@ -20,6 +20,6 @@ type Reader interface {
 }
 
 type Schema interface {
-	SelectOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream database.Stream) (database.OutboxWatermark, int64, error)
-	UpdateOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream database.Stream, delay time.Duration, watermark database.OutboxWatermark) error
+	SelectOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream es.StreamReference) (database.OutboxWatermark, int64, error)
+	UpdateOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream es.StreamReference, delay time.Duration, watermark database.OutboxWatermark) error
 }
