@@ -277,6 +277,7 @@ func (s *Schema) SelectStreamReferences(ctx context.Context, db dbtx.DBTX, strea
 func init() {
 	sql.selectOutboxStreamIDs = `
 SELECT stream_type,
+       stream_id,
        store_stream_id
 FROM {{ .Prefix }}_outbox
 WHERE
@@ -289,7 +290,7 @@ LIMIT $4
 `
 }
 
-func (s *Schema) SelectOutboxStreamIDs(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]Stream, error) {
+func (s *Schema) SelectOutboxStreamIDs(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]es.StreamReference, error) {
 	if token == "" {
 		token = uuid.Empty
 	}
@@ -303,10 +304,10 @@ func (s *Schema) SelectOutboxStreamIDs(ctx context.Context, db dbtx.DBTX, graceW
 		return nil, err
 	}
 
-	var result []Stream
+	var result []es.StreamReference
 	for rows.Next() {
-		var stream Stream
-		err = rows.Scan(&stream.Type, &stream.StoreID)
+		var stream es.StreamReference
+		err = rows.Scan(&stream.StreamType, &stream.StreamID, &stream.StoreStreamID)
 		if err != nil {
 			return nil, err
 		}
@@ -330,9 +331,9 @@ WHERE
 AND store_stream_id = $2;
 `
 }
-func (s *Schema) SelectOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream Stream) (OutboxWatermark, int64, error) {
+func (s *Schema) SelectOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream es.StreamReference) (OutboxWatermark, int64, error) {
 	var (
-		row         = db.QueryRow(ctx, sql.selectOutboxWatermark, stream.Type, stream.StoreID)
+		row         = db.QueryRow(ctx, sql.selectOutboxWatermark, stream.StreamType, stream.StoreStreamID)
 		w           OutboxWatermark
 		eventNumber int64
 	)
@@ -352,10 +353,10 @@ WHERE stream_type = $1
   AND store_stream_id = $2
 `
 }
-func (s *Schema) UpdateOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream Stream, delay time.Duration, watermark OutboxWatermark) error {
+func (s *Schema) UpdateOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream es.StreamReference, delay time.Duration, watermark OutboxWatermark) error {
 	tag, err := db.Exec(ctx, sql.updateOutboxWatermark,
-		stream.Type,
-		stream.StoreID,
+		stream.StreamType,
+		stream.StoreStreamID,
 		time.Now().Add(delay),
 		watermark.Watermark,
 		watermark.RetryCount,
@@ -365,7 +366,7 @@ func (s *Schema) UpdateOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream
 	}
 
 	if tag.RowsAffected() != 1 {
-		return fmt.Errorf("stream %q not watermark updated", stream.Type)
+		return fmt.Errorf("stream %q not watermark updated", stream.StreamType)
 	}
 	return err
 }

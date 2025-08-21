@@ -70,7 +70,7 @@ func (h *Periodic) reconcile(rootCtx context.Context, p Processor) error {
 		}
 
 		for _, stream := range streams {
-			token = stream.StoreID
+			token = stream.StoreStreamID
 			g.Go(func() error {
 				processCtx, processCancel := context.WithTimeout(rootCtx, h.processTimeout)
 				defer processCancel()

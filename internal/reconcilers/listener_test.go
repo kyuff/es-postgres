@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/kyuff/es"
 	"github.com/kyuff/es-postgres/internal/assert"
-	"github.com/kyuff/es-postgres/internal/database"
 	"github.com/kyuff/es-postgres/internal/reconcilers"
 )
 
@@ -18,7 +18,7 @@ func TestNewListener(t *testing.T) {
 			p = &ProcessorMock{}
 		)
 
-		p.ProcessFunc = func(ctx context.Context, stream database.Stream) error {
+		p.ProcessFunc = func(ctx context.Context, stream es.StreamReference) error {
 			return nil
 		}
 

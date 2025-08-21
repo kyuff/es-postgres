@@ -75,17 +75,3 @@ func Events(count int, mods ...func(e *es.Event)) []es.Event {
 
 	return events
 }
-
-func StreamReference(streamType string, count int) []es.StreamReference {
-	var refs []es.StreamReference
-	var ids = uuid.V7At(time.Now(), count)
-	var storeIDs = uuid.V7At(time.Now(), count)
-	for i := range count {
-		refs = append(refs, es.StreamReference{
-			StreamType:    streamType,
-			StreamID:      ids[i],
-			StoreStreamID: storeIDs[i],
-		})
-	}
-	return refs
-}
