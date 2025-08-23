@@ -61,7 +61,7 @@ func New(connector Connector, opts ...Option) (*Storage, error) {
 
 	var recons []reconcilers.Reconciler
 	if cfg.listenPublishing {
-		var listener = reconcilers.NewListener()
+		var listener = reconcilers.NewListener(connector, cfg.tablePrefix)
 		cfg.leasesOptions = append(cfg.leasesOptions, leases.WithValueListener(listener))
 		recons = append(recons, listener)
 	}

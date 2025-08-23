@@ -85,6 +85,9 @@ var _ reconcilers.Connector = &ConnectorMock{}
 //			AcquireReadFunc: func(ctx context.Context) (*pgxpool.Conn, error) {
 //				panic("mock out the AcquireRead method")
 //			},
+//			AcquireWriteFunc: func(ctx context.Context) (*pgxpool.Conn, error) {
+//				panic("mock out the AcquireWrite method")
+//			},
 //		}
 //
 //		// use mockedConnector in code that requires reconcilers.Connector
@@ -95,6 +98,9 @@ type ConnectorMock struct {
 	// AcquireReadFunc mocks the AcquireRead method.
 	AcquireReadFunc func(ctx context.Context) (*pgxpool.Conn, error)
 
+	// AcquireWriteFunc mocks the AcquireWrite method.
+	AcquireWriteFunc func(ctx context.Context) (*pgxpool.Conn, error)
+
 	// calls tracks calls to the methods.
 	calls struct {
 		// AcquireRead holds details about calls to the AcquireRead method.
@@ -102,8 +108,14 @@ type ConnectorMock struct {
 			// Ctx is the ctx argument value.
 			Ctx context.Context
 		}
+		// AcquireWrite holds details about calls to the AcquireWrite method.
+		AcquireWrite []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+		}
 	}
-	lockAcquireRead sync.RWMutex
+	lockAcquireRead  sync.RWMutex
+	lockAcquireWrite sync.RWMutex
 }
 
 // AcquireRead calls AcquireReadFunc.
@@ -135,6 +147,38 @@ func (mock *ConnectorMock) AcquireReadCalls() []struct {
 	mock.lockAcquireRead.RLock()
 	calls = mock.calls.AcquireRead
 	mock.lockAcquireRead.RUnlock()
+	return calls
+}
+
+// AcquireWrite calls AcquireWriteFunc.
+func (mock *ConnectorMock) AcquireWrite(ctx context.Context) (*pgxpool.Conn, error) {
+	if mock.AcquireWriteFunc == nil {
+		panic("ConnectorMock.AcquireWriteFunc: method is nil but Connector.AcquireWrite was just called")
+	}
+	callInfo := struct {
+		Ctx context.Context
+	}{
+		Ctx: ctx,
+	}
+	mock.lockAcquireWrite.Lock()
+	mock.calls.AcquireWrite = append(mock.calls.AcquireWrite, callInfo)
+	mock.lockAcquireWrite.Unlock()
+	return mock.AcquireWriteFunc(ctx)
+}
+
+// AcquireWriteCalls gets all the calls that were made to AcquireWrite.
+// Check the length with:
+//
+//	len(mockedConnector.AcquireWriteCalls())
+func (mock *ConnectorMock) AcquireWriteCalls() []struct {
+	Ctx context.Context
+} {
+	var calls []struct {
+		Ctx context.Context
+	}
+	mock.lockAcquireWrite.RLock()
+	calls = mock.calls.AcquireWrite
+	mock.lockAcquireWrite.RUnlock()
 	return calls
 }
 

@@ -26,13 +26,13 @@ type Schema interface {
 }
 
 type ValueListener interface {
-	ValuesChanged(ctx context.Context, added, removed []uint32) error
+	ValuesChanged(ctx context.Context, values, added, removed []uint32) error
 }
 
-type ValueListenerFunc func(ctx context.Context, added, removed []uint32) error
+type ValueListenerFunc func(ctx context.Context, values, added, removed []uint32) error
 
-func (fn ValueListenerFunc) ValuesChanged(ctx context.Context, added, removed []uint32) error {
-	return fn(ctx, added, removed)
+func (fn ValueListenerFunc) ValuesChanged(ctx context.Context, values, added, removed []uint32) error {
+	return fn(ctx, values, added, removed)
 }
 
 type Leases struct {
@@ -102,5 +102,5 @@ func (s *Leases) tick(ctx context.Context) error {
 		return nil
 	}
 
-	return s.cfg.listener.ValuesChanged(ctx, added, removed)
+	return s.cfg.listener.ValuesChanged(ctx, values, added, removed)
 }

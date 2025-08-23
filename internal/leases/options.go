@@ -125,7 +125,7 @@ func WithValueListener(listener ValueListener) Option {
 }
 
 func noopValueListener() ValueListenerFunc {
-	return func(ctx context.Context, added, removed []uint32) error {
+	return func(ctx context.Context, values, added, removed []uint32) error {
 		return nil
 	}
 }

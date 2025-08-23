@@ -15,6 +15,7 @@ type Valuer interface {
 
 type Connector interface {
 	AcquireRead(ctx context.Context) (*pgxpool.Conn, error)
+	AcquireWrite(ctx context.Context) (*pgxpool.Conn, error)
 }
 
 type Schema interface {
