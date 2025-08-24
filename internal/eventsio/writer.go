@@ -92,7 +92,11 @@ func (w *Writer) Write(ctx context.Context, db dbtx.DBTX, streamType string, eve
 		return fmt.Errorf("[es/postgres] Failed to update outbox for %s.%s", streamType, lastEvent.StreamID)
 	}
 
-	payload := listenerpayload.Encode(streamType, lastEvent.StreamID, lastEvent.StoreStreamID)
+	payload := listenerpayload.Encode(es.StreamReference{
+		StreamType:    streamType,
+		StreamID:      lastEvent.StreamID,
+		StoreStreamID: lastEvent.StoreStreamID,
+	})
 	err = w.schema.Notify(ctx, db, partition, payload)
 	if err != nil {
 		return err

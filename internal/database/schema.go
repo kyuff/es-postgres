@@ -457,7 +457,6 @@ func (s *Schema) InsertLease(ctx context.Context, db dbtx.DBTX, vnode uint32, na
 
 func (s *Schema) Notify(ctx context.Context, db dbtx.DBTX, partition uint32, payload string) error {
 	query := fmt.Sprintf("NOTIFY %s, '%s'", channelName(s.Prefix, partition), payload)
-	fmt.Printf("%s\n", query)
 	_, err := db.Exec(ctx, query)
 	return err
 }

@@ -10,8 +10,10 @@ import (
 	"github.com/kyuff/es-postgres/internal/assert"
 	"github.com/kyuff/es-postgres/internal/database"
 	"github.com/kyuff/es-postgres/internal/dbtx"
+	"github.com/kyuff/es-postgres/internal/listenerpayload"
 	"github.com/kyuff/es-postgres/internal/logger"
 	"github.com/kyuff/es-postgres/internal/reconcilers"
+	"github.com/kyuff/es-postgres/internal/testdata"
 )
 
 func TestNewListener(t *testing.T) {
@@ -119,5 +121,67 @@ func TestNewListener(t *testing.T) {
 		// assert
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(f.schemaMock.ListenCalls()))
+	})
+
+	t.Run("should process streams", func(t *testing.T) {
+		// arrange
+		var (
+			f        = newFixture(t)
+			timeout  = time.Millisecond * 100
+			listener = reconcilers.NewListener(f.connectorMock, f.schemaMock, f.logger, timeout)
+
+			stream = testdata.StreamReference()
+		)
+
+		f.processor.ProcessFunc = func(ctx context.Context, got es.StreamReference) error {
+			defer f.cancel()
+
+			assert.Equal(t, stream, got)
+			return nil
+		}
+
+		go func() {
+			assert.NoError(t, listener.ValuesChanged(values(0, 10), nil))
+			assert.NoError(t, f.schema.Notify(t.Context(), f.pool, 2, listenerpayload.Encode(stream)))
+		}()
+
+		// act
+		err := listener.Reconcile(f.ctx, f.processor)
+
+		// assert
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(f.processor.ProcessCalls()))
+	})
+
+	t.Run("should not process streams with foreign value", func(t *testing.T) {
+		// arrange
+		var (
+			f        = newFixture(t)
+			timeout  = time.Millisecond * 100
+			listener = reconcilers.NewListener(f.connectorMock, f.schemaMock, f.logger, timeout)
+
+			stream = testdata.StreamReference()
+			other  = testdata.StreamReference()
+		)
+
+		f.processor.ProcessFunc = func(ctx context.Context, got es.StreamReference) error {
+			defer f.cancel()
+
+			assert.Equal(t, stream, got)
+			return nil
+		}
+
+		go func() {
+			assert.NoError(t, listener.ValuesChanged(values(0, 10), nil))
+			assert.NoError(t, f.schema.Notify(t.Context(), f.pool, 300, listenerpayload.Encode(other)))
+			assert.NoError(t, f.schema.Notify(t.Context(), f.pool, 2, listenerpayload.Encode(stream)))
+		}()
+
+		// act
+		err := listener.Reconcile(f.ctx, f.processor)
+
+		// assert
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(f.processor.ProcessCalls()))
 	})
 }

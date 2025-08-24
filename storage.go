@@ -143,7 +143,6 @@ func (s *Storage) StartPublish(ctx context.Context, w es.Writer) error {
 	})
 
 	for _, r := range s.reconciles {
-		fmt.Printf("STARTING RECONCILER: %T\n", r)
 		g.Go(func() error {
 			return r.Reconcile(publishCtx, p)
 		})
