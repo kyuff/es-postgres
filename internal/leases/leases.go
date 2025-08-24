@@ -26,13 +26,13 @@ type Schema interface {
 }
 
 type ValueListener interface {
-	ValuesChanged(ctx context.Context, values, added, removed []uint32) error
+	ValuesChanged(added, removed []uint32) error
 }
 
-type ValueListenerFunc func(ctx context.Context, values, added, removed []uint32) error
+type ValueListenerFunc func(added, removed []uint32) error
 
-func (fn ValueListenerFunc) ValuesChanged(ctx context.Context, values, added, removed []uint32) error {
-	return fn(ctx, values, added, removed)
+func (fn ValueListenerFunc) ValuesChanged(added, removed []uint32) error {
+	return fn(added, removed)
 }
 
 type Leases struct {
@@ -70,7 +70,6 @@ func (s *Leases) Values() []uint32 {
 
 // Start is blocking and keeps the Values up to date.
 func (s *Leases) Start(ctx context.Context) error {
-	fmt.Printf("STARTING LEASES SUPERVISOR %s\n", s.cfg.HeartbeatInterval)
 	err := retry.Continue(ctx, s.cfg.HeartbeatInterval, 10, s.tick)
 	if err != nil {
 		return fmt.Errorf("supervisor failed: %w", err)
@@ -80,7 +79,6 @@ func (s *Leases) Start(ctx context.Context) error {
 }
 
 func (s *Leases) tick(ctx context.Context) error {
-	fmt.Printf("HEARTBEAT\n")
 	ctx, cancel := context.WithTimeout(ctx, s.cfg.HeartbeatTimeout)
 	defer cancel()
 
@@ -98,13 +96,11 @@ func (s *Leases) tick(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	fmt.Printf("HERE\n")
 	added, removed := diff(s.values, values)
 	s.values = values
 	if len(added) == 0 && len(removed) == 0 {
 		return nil
 	}
 
-	fmt.Printf("VALUES HEARTBEAT: %v\n", values)
-	return s.cfg.listener.ValuesChanged(ctx, values, added, removed)
+	return s.cfg.listener.ValuesChanged(added, removed)
 }

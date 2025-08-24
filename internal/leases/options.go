@@ -1,7 +1,6 @@
 package leases
 
 import (
-	"context"
 	"fmt"
 	"math/rand/v2"
 	"strings"
@@ -125,7 +124,7 @@ func WithValueListener(listener ValueListener) Option {
 }
 
 func noopValueListener() ValueListenerFunc {
-	return func(ctx context.Context, values, added, removed []uint32) error {
+	return func(added, removed []uint32) error {
 		return nil
 	}
 }

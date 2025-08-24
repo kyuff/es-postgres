@@ -109,7 +109,7 @@ func TestNewListener(t *testing.T) {
 		}
 
 		go func() {
-			err := listener.ValuesChanged(f.ctx, values(0, 10), values(0, 10), nil)
+			err := listener.ValuesChanged(values(0, 10), nil)
 			assert.NoError(t, err)
 		}()
 
