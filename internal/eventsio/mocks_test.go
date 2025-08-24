@@ -26,6 +26,9 @@ var _ eventsio.Schema = &SchemaMock{}
 //			InsertOutboxFunc: func(ctx context.Context, tx dbtx.DBTX, streamType string, streamID string, storeStreamID string, eventNumber int64, watermark int64, partition uint32) (int64, error) {
 //				panic("mock out the InsertOutbox method")
 //			},
+//			NotifyFunc: func(ctx context.Context, db dbtx.DBTX, partition uint32, payload string) error {
+//				panic("mock out the Notify method")
+//			},
 //			SelectEventsFunc: func(ctx context.Context, db dbtx.DBTX, streamType string, streamID string, eventNumber int64) (pgx.Rows, error) {
 //				panic("mock out the SelectEvents method")
 //			},
@@ -44,6 +47,9 @@ var _ eventsio.Schema = &SchemaMock{}
 type SchemaMock struct {
 	// InsertOutboxFunc mocks the InsertOutbox method.
 	InsertOutboxFunc func(ctx context.Context, tx dbtx.DBTX, streamType string, streamID string, storeStreamID string, eventNumber int64, watermark int64, partition uint32) (int64, error)
+
+	// NotifyFunc mocks the Notify method.
+	NotifyFunc func(ctx context.Context, db dbtx.DBTX, partition uint32, payload string) error
 
 	// SelectEventsFunc mocks the SelectEvents method.
 	SelectEventsFunc func(ctx context.Context, db dbtx.DBTX, streamType string, streamID string, eventNumber int64) (pgx.Rows, error)
@@ -74,6 +80,17 @@ type SchemaMock struct {
 			Watermark int64
 			// Partition is the partition argument value.
 			Partition uint32
+		}
+		// Notify holds details about calls to the Notify method.
+		Notify []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Db is the db argument value.
+			Db dbtx.DBTX
+			// Partition is the partition argument value.
+			Partition uint32
+			// Payload is the payload argument value.
+			Payload string
 		}
 		// SelectEvents holds details about calls to the SelectEvents method.
 		SelectEvents []struct {
@@ -118,6 +135,7 @@ type SchemaMock struct {
 		}
 	}
 	lockInsertOutbox sync.RWMutex
+	lockNotify       sync.RWMutex
 	lockSelectEvents sync.RWMutex
 	lockUpdateOutbox sync.RWMutex
 	lockWriteEvent   sync.RWMutex
@@ -180,6 +198,50 @@ func (mock *SchemaMock) InsertOutboxCalls() []struct {
 	mock.lockInsertOutbox.RLock()
 	calls = mock.calls.InsertOutbox
 	mock.lockInsertOutbox.RUnlock()
+	return calls
+}
+
+// Notify calls NotifyFunc.
+func (mock *SchemaMock) Notify(ctx context.Context, db dbtx.DBTX, partition uint32, payload string) error {
+	if mock.NotifyFunc == nil {
+		panic("SchemaMock.NotifyFunc: method is nil but Schema.Notify was just called")
+	}
+	callInfo := struct {
+		Ctx       context.Context
+		Db        dbtx.DBTX
+		Partition uint32
+		Payload   string
+	}{
+		Ctx:       ctx,
+		Db:        db,
+		Partition: partition,
+		Payload:   payload,
+	}
+	mock.lockNotify.Lock()
+	mock.calls.Notify = append(mock.calls.Notify, callInfo)
+	mock.lockNotify.Unlock()
+	return mock.NotifyFunc(ctx, db, partition, payload)
+}
+
+// NotifyCalls gets all the calls that were made to Notify.
+// Check the length with:
+//
+//	len(mockedSchema.NotifyCalls())
+func (mock *SchemaMock) NotifyCalls() []struct {
+	Ctx       context.Context
+	Db        dbtx.DBTX
+	Partition uint32
+	Payload   string
+} {
+	var calls []struct {
+		Ctx       context.Context
+		Db        dbtx.DBTX
+		Partition uint32
+		Payload   string
+	}
+	mock.lockNotify.RLock()
+	calls = mock.calls.Notify
+	mock.lockNotify.RUnlock()
 	return calls
 }
 

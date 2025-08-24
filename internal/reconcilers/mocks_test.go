@@ -192,8 +192,14 @@ var _ reconcilers.Schema = &SchemaMock{}
 //
 //		// make and configure a mocked reconcilers.Schema
 //		mockedSchema := &SchemaMock{
+//			ListenFunc: func(ctx context.Context, db dbtx.DBTX, partitions []uint32) error {
+//				panic("mock out the Listen method")
+//			},
 //			SelectOutboxStreamIDsFunc: func(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]es.StreamReference, error) {
 //				panic("mock out the SelectOutboxStreamIDs method")
+//			},
+//			UnlistenFunc: func(ctx context.Context, db dbtx.DBTX, partitions []uint32) error {
+//				panic("mock out the Unlisten method")
 //			},
 //		}
 //
@@ -202,11 +208,26 @@ var _ reconcilers.Schema = &SchemaMock{}
 //
 //	}
 type SchemaMock struct {
+	// ListenFunc mocks the Listen method.
+	ListenFunc func(ctx context.Context, db dbtx.DBTX, partitions []uint32) error
+
 	// SelectOutboxStreamIDsFunc mocks the SelectOutboxStreamIDs method.
 	SelectOutboxStreamIDsFunc func(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]es.StreamReference, error)
 
+	// UnlistenFunc mocks the Unlisten method.
+	UnlistenFunc func(ctx context.Context, db dbtx.DBTX, partitions []uint32) error
+
 	// calls tracks calls to the methods.
 	calls struct {
+		// Listen holds details about calls to the Listen method.
+		Listen []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Db is the db argument value.
+			Db dbtx.DBTX
+			// Partitions is the partitions argument value.
+			Partitions []uint32
+		}
 		// SelectOutboxStreamIDs holds details about calls to the SelectOutboxStreamIDs method.
 		SelectOutboxStreamIDs []struct {
 			// Ctx is the ctx argument value.
@@ -222,8 +243,59 @@ type SchemaMock struct {
 			// Limit is the limit argument value.
 			Limit int
 		}
+		// Unlisten holds details about calls to the Unlisten method.
+		Unlisten []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Db is the db argument value.
+			Db dbtx.DBTX
+			// Partitions is the partitions argument value.
+			Partitions []uint32
+		}
 	}
+	lockListen                sync.RWMutex
 	lockSelectOutboxStreamIDs sync.RWMutex
+	lockUnlisten              sync.RWMutex
+}
+
+// Listen calls ListenFunc.
+func (mock *SchemaMock) Listen(ctx context.Context, db dbtx.DBTX, partitions []uint32) error {
+	if mock.ListenFunc == nil {
+		panic("SchemaMock.ListenFunc: method is nil but Schema.Listen was just called")
+	}
+	callInfo := struct {
+		Ctx        context.Context
+		Db         dbtx.DBTX
+		Partitions []uint32
+	}{
+		Ctx:        ctx,
+		Db:         db,
+		Partitions: partitions,
+	}
+	mock.lockListen.Lock()
+	mock.calls.Listen = append(mock.calls.Listen, callInfo)
+	mock.lockListen.Unlock()
+	return mock.ListenFunc(ctx, db, partitions)
+}
+
+// ListenCalls gets all the calls that were made to Listen.
+// Check the length with:
+//
+//	len(mockedSchema.ListenCalls())
+func (mock *SchemaMock) ListenCalls() []struct {
+	Ctx        context.Context
+	Db         dbtx.DBTX
+	Partitions []uint32
+} {
+	var calls []struct {
+		Ctx        context.Context
+		Db         dbtx.DBTX
+		Partitions []uint32
+	}
+	mock.lockListen.RLock()
+	calls = mock.calls.Listen
+	mock.lockListen.RUnlock()
+	return calls
 }
 
 // SelectOutboxStreamIDs calls SelectOutboxStreamIDsFunc.
@@ -275,6 +347,46 @@ func (mock *SchemaMock) SelectOutboxStreamIDsCalls() []struct {
 	mock.lockSelectOutboxStreamIDs.RLock()
 	calls = mock.calls.SelectOutboxStreamIDs
 	mock.lockSelectOutboxStreamIDs.RUnlock()
+	return calls
+}
+
+// Unlisten calls UnlistenFunc.
+func (mock *SchemaMock) Unlisten(ctx context.Context, db dbtx.DBTX, partitions []uint32) error {
+	if mock.UnlistenFunc == nil {
+		panic("SchemaMock.UnlistenFunc: method is nil but Schema.Unlisten was just called")
+	}
+	callInfo := struct {
+		Ctx        context.Context
+		Db         dbtx.DBTX
+		Partitions []uint32
+	}{
+		Ctx:        ctx,
+		Db:         db,
+		Partitions: partitions,
+	}
+	mock.lockUnlisten.Lock()
+	mock.calls.Unlisten = append(mock.calls.Unlisten, callInfo)
+	mock.lockUnlisten.Unlock()
+	return mock.UnlistenFunc(ctx, db, partitions)
+}
+
+// UnlistenCalls gets all the calls that were made to Unlisten.
+// Check the length with:
+//
+//	len(mockedSchema.UnlistenCalls())
+func (mock *SchemaMock) UnlistenCalls() []struct {
+	Ctx        context.Context
+	Db         dbtx.DBTX
+	Partitions []uint32
+} {
+	var calls []struct {
+		Ctx        context.Context
+		Db         dbtx.DBTX
+		Partitions []uint32
+	}
+	mock.lockUnlisten.RLock()
+	calls = mock.calls.Unlisten
+	mock.lockUnlisten.RUnlock()
 	return calls
 }
 

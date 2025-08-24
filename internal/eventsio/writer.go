@@ -7,6 +7,7 @@ import (
 
 	"github.com/kyuff/es"
 	"github.com/kyuff/es-postgres/internal/dbtx"
+	"github.com/kyuff/es-postgres/internal/listenerpayload"
 )
 
 func NewWriter(schema Schema, validator Validator, codec Codec, partitioner func(streamType, streamID string) uint32) *Writer {
@@ -63,6 +64,7 @@ func (w *Writer) Write(ctx context.Context, db dbtx.DBTX, streamType string, eve
 		return nil // nothing was done
 	}
 
+	var partition = w.partitioner(streamType, lastEvent.StreamID)
 	var affected int64
 	var err error
 	if firstEvent.EventNumber == 1 {
@@ -72,7 +74,7 @@ func (w *Writer) Write(ctx context.Context, db dbtx.DBTX, streamType string, eve
 			lastEvent.StoreStreamID,
 			lastEvent.EventNumber,
 			firstEvent.EventNumber-1,
-			w.partitioner(streamType, lastEvent.StreamID),
+			partition,
 		)
 	} else {
 		affected, err = w.schema.UpdateOutbox(ctx, db,
@@ -90,5 +92,15 @@ func (w *Writer) Write(ctx context.Context, db dbtx.DBTX, streamType string, eve
 		return fmt.Errorf("[es/postgres] Failed to update outbox for %s.%s", streamType, lastEvent.StreamID)
 	}
 
+	payload := listenerpayload.Encode(streamType, lastEvent.StreamID, lastEvent.StoreStreamID)
+	err = w.schema.Notify(ctx, db, partition, payload)
+	if err != nil {
+		return err
+	}
+
 	return nil
+}
+
+func channelName(prefix string, partition uint32) string {
+	return ""
 }

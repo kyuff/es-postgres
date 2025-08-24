@@ -61,7 +61,7 @@ func New(connector Connector, opts ...Option) (*Storage, error) {
 
 	var recons []reconcilers.Reconciler
 	if cfg.listenPublishing {
-		var listener = reconcilers.NewListener(connector, cfg.tablePrefix)
+		var listener = reconcilers.NewListener(connector, schema, cfg.logger, cfg.processTimeout)
 		cfg.leasesOptions = append(cfg.leasesOptions, leases.WithValueListener(listener))
 		recons = append(recons, listener)
 	}
@@ -143,6 +143,7 @@ func (s *Storage) StartPublish(ctx context.Context, w es.Writer) error {
 	})
 
 	for _, r := range s.reconciles {
+		fmt.Printf("STARTING RECONCILER: %T\n", r)
 		g.Go(func() error {
 			return r.Reconcile(publishCtx, p)
 		})

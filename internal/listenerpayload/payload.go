@@ -1,0 +1,24 @@
+package listenerpayload
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/kyuff/es"
+)
+
+func Encode(streamType, streamID, storeStreamID string) string {
+	return streamType + ":" + storeStreamID
+}
+
+func Decode(payload string) (es.StreamReference, error) {
+	parts := strings.Split(payload, ":")
+	if len(parts) != 2 {
+		return es.StreamReference{}, fmt.Errorf("malformed payload: %s", payload)
+	}
+
+	return es.StreamReference{
+		StreamType:    parts[0],
+		StoreStreamID: parts[1],
+	}, nil
+}

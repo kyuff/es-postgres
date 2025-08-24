@@ -454,3 +454,44 @@ func (s *Schema) InsertLease(ctx context.Context, db dbtx.DBTX, vnode uint32, na
 	_, err := db.Exec(ctx, sql.insertLease, vnode, name, rfc8601.Format(ttl), status)
 	return err
 }
+
+func (s *Schema) Notify(ctx context.Context, db dbtx.DBTX, partition uint32, payload string) error {
+	query := fmt.Sprintf("NOTIFY %s, '%s'", channelName(s.Prefix, partition), payload)
+	fmt.Printf("%s\n", query)
+	_, err := db.Exec(ctx, query)
+	return err
+}
+
+func (s *Schema) Listen(ctx context.Context, db dbtx.DBTX, partitions []uint32) error {
+	if db == nil {
+		return fmt.Errorf("no connection")
+	}
+
+	for _, partition := range partitions {
+		_, err := db.Exec(ctx, "LISTEN "+channelName(s.Prefix, partition))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *Schema) Unlisten(ctx context.Context, db dbtx.DBTX, partitions []uint32) error {
+	if db == nil {
+		return fmt.Errorf("no connection")
+	}
+
+	for _, partition := range partitions {
+		_, err := db.Exec(ctx, "UNLISTEN "+channelName(s.Prefix, partition))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func channelName(prefix string, partition uint32) string {
+	return fmt.Sprintf("%s_%d", prefix, partition)
+}

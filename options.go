@@ -48,7 +48,7 @@ func defaultOptions() *Config {
 		WithListenPublishing(true),
 		WithReconcilePublishing(true),
 		WithFNVPartitioner(defaultPartitionCount),
-		withLeaseRange(0, defaultPartitionCount),
+		WithLeaseRange(0, defaultPartitionCount),
 	)
 
 }
@@ -228,8 +228,8 @@ func withLeaseOption(opt leases.Option) Option {
 	}
 }
 
-// withLeaseRange sets the range of leases used by the consistent hashing mechanism.
-func withLeaseRange(from, to uint32) Option {
+// WithLeaseRange sets the range of leases used by the consistent hashing mechanism.
+func WithLeaseRange(from, to uint32) Option {
 	return withLeaseOption(leases.WithRange(leases.Range{
 		From: from,
 		To:   to,
@@ -240,10 +240,10 @@ func withLeaseNodeName(nodeName string) Option {
 	return withLeaseOption(leases.WithNodeName(nodeName))
 }
 
-func withLeaseVNodeCount(count uint32) Option {
+func WithLeaseVNodeCount(count uint32) Option {
 	return withLeaseOption(leases.WithVNodeCount(count))
 }
 
-func withLeaseHeartbeatInterval(interval time.Duration) Option {
+func WithLeaseHeartbeatInterval(interval time.Duration) Option {
 	return withLeaseOption(leases.WithHeartbeatInterval(interval))
 }

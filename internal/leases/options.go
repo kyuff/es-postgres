@@ -57,7 +57,7 @@ func (cfg Config) validate() error {
 		return fmt.Errorf("leases: vnode count must be greater than 0")
 	}
 
-	if cfg.VNodeCount >= cfg.Range.Len() {
+	if cfg.VNodeCount > cfg.Range.Len() {
 		return fmt.Errorf("leases: vnode count (%d) must be less than range size (%s)", cfg.VNodeCount, cfg.Range)
 	}
 

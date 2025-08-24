@@ -367,6 +367,9 @@ func TestStorage(t *testing.T) {
 			var (
 				storage = newInstance(t,
 					postgres.WithReconcileInterval(time.Millisecond*100),
+					postgres.WithLeaseHeartbeatInterval(time.Millisecond*100),
+					postgres.WithLeaseRange(0, 10),
+					postgres.WithLeaseVNodeCount(10),
 				)
 				w = &WriterMock{}
 
