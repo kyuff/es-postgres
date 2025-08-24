@@ -111,7 +111,7 @@ func TestNewListener(t *testing.T) {
 		}
 
 		go func() {
-			err := listener.ValuesChanged(values(0, 10), nil)
+			err := listener.ValuesChanged(values(0, 10), values(0, 10), nil)
 			assert.NoError(t, err)
 		}()
 
@@ -141,7 +141,7 @@ func TestNewListener(t *testing.T) {
 		}
 
 		go func() {
-			assert.NoError(t, listener.ValuesChanged(values(0, 10), nil))
+			assert.NoError(t, listener.ValuesChanged(values(0, 10), values(0, 10), nil))
 			assert.NoError(t, f.schema.Notify(t.Context(), f.pool, 2, listenerpayload.Encode(stream)))
 		}()
 
@@ -172,7 +172,7 @@ func TestNewListener(t *testing.T) {
 		}
 
 		go func() {
-			assert.NoError(t, listener.ValuesChanged(values(0, 10), nil))
+			assert.NoError(t, listener.ValuesChanged(values(0, 10), values(0, 10), nil))
 			assert.NoError(t, f.schema.Notify(t.Context(), f.pool, 300, listenerpayload.Encode(other)))
 			assert.NoError(t, f.schema.Notify(t.Context(), f.pool, 2, listenerpayload.Encode(stream)))
 		}()

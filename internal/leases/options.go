@@ -124,7 +124,7 @@ func WithValueListener(listener ValueListener) Option {
 }
 
 func noopValueListener() ValueListenerFunc {
-	return func(added, removed []uint32) error {
+	return func(values, added, removed []uint32) error {
 		return nil
 	}
 }

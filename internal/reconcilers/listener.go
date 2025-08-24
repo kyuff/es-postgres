@@ -94,7 +94,7 @@ func (l *Listener) awaitNotifications(ctx context.Context, conn *pgxpool.Conn, p
 	}
 }
 
-func (l *Listener) ValuesChanged(added, removed []uint32) error {
+func (l *Listener) ValuesChanged(values, added, removed []uint32) error {
 	l.mu.Lock()
 	for !l.started { // block until first cancel is available
 		l.ready.Wait()
