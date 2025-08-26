@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kyuff/es-postgres/internal/listenerpayload"
+	"github.com/kyuff/es-postgres/internal/retry"
 )
 
 func NewListener(connector Connector, schema Schema, logger Logger, timeout time.Duration) *Listener {
@@ -35,13 +36,19 @@ type Listener struct {
 	started        bool
 	mu             sync.Mutex
 	cancel         context.CancelFunc // cancels the current WaitForNotification
+	values         []uint32
 }
 
 func (l *Listener) Reconcile(ctx context.Context, p Processor) error {
-	for {
+	return retry.Continue(ctx, 20*time.Millisecond, 10, func(ctx context.Context) error {
 		conn, err := l.connector.AcquireWrite(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to acquire conn: %w", err)
+		}
+
+		err = l.schema.Listen(ctx, conn, l.values)
+		if err != nil {
+			return err
 		}
 
 		err = l.awaitNotifications(ctx, conn, p)
@@ -54,7 +61,14 @@ func (l *Listener) Reconcile(ctx context.Context, p Processor) error {
 		if ctx.Err() != nil {
 			return fmt.Errorf("listener: %s", ctx.Err())
 		}
-	}
+
+		if err != nil {
+			l.logger.InfofCtx(ctx, "[es/postgres] Retrying connection failure: %s", err)
+			return nil
+		}
+
+		return nil
+	})
 }
 
 func (l *Listener) awaitNotifications(ctx context.Context, conn *pgxpool.Conn, p Processor) error {
@@ -63,7 +77,9 @@ func (l *Listener) awaitNotifications(ctx context.Context, conn *pgxpool.Conn, p
 		waitCtx, cancel := context.WithCancel(ctx)
 
 		l.mu.Lock()
+
 		l.cancel = cancel
+
 		if !l.started {
 			l.started = true
 			l.ready.Broadcast() // wake any ValueChanged waiting
@@ -100,6 +116,7 @@ func (l *Listener) ValuesChanged(values, added, removed []uint32) error {
 		l.ready.Wait()
 	}
 	cancel := l.cancel // capture under lock
+	l.values = values
 	l.mu.Unlock()
 
 	done := make(chan error)

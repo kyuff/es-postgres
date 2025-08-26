@@ -184,4 +184,54 @@ func TestNewListener(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(f.processor.ProcessCalls()))
 	})
+
+	t.Run("should process even if conn disconnects", func(t *testing.T) {
+		// arrange
+		var (
+			f        = newFixture(t)
+			timeout  = time.Millisecond * 100
+			listener = reconcilers.NewListener(f.connectorMock, f.schemaMock, f.logger, timeout)
+
+			refA = testdata.StreamReference()
+			refB = testdata.StreamReference()
+			pid  uint32
+			got  []es.StreamReference
+		)
+
+		f.connectorMock.AcquireWriteFunc = func(ctx context.Context) (*pgxpool.Conn, error) {
+			conn, err := f.pool.Acquire(ctx)
+			if len(f.connectorMock.AcquireWriteCalls()) == 1 {
+				pid = conn.Conn().PgConn().PID()
+			}
+			return conn, err
+		}
+
+		f.processor.ProcessFunc = func(ctx context.Context, ref es.StreamReference) error {
+			if len(f.processor.ProcessCalls()) == 2 {
+				defer f.cancel()
+			}
+			got = append(got, ref)
+			return nil
+		}
+
+		go func() {
+			assert.NoError(t, listener.ValuesChanged(values(0, 10), values(0, 10), nil))
+			assert.NoError(t, f.schema.Notify(t.Context(), f.pool, 2, listenerpayload.Encode(refA)))
+
+			_, err := f.pool.Exec(t.Context(), "select pg_terminate_backend($1)", pid)
+			assert.NoError(t, err)
+			go func() {
+				time.Sleep(time.Millisecond * 100)
+				assert.NoError(t, f.schema.Notify(t.Context(), f.pool, 4, listenerpayload.Encode(refB)))
+			}()
+		}()
+
+		// act
+		err := listener.Reconcile(f.ctx, f.processor)
+
+		// assert
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(f.processor.ProcessCalls()))
+		assert.EqualSlice(t, []es.StreamReference{refA, refB}, got)
+	})
 }
