@@ -21,33 +21,9 @@ import (
 func TestProcess(t *testing.T) {
 
 	var (
-		eventsEqual = func(t *testing.T) func(expected, got assert.KeyValue[es.Event, error]) bool {
-			return func(expected, got assert.KeyValue[es.Event, error]) bool {
-				return assert.Equal(t, expected.Key.StreamID, got.Key.StreamID) &&
-					assert.Equal(t, expected.Key.StreamType, got.Key.StreamType) &&
-					assert.Equal(t, expected.Key.StoreEventID, got.Key.StoreEventID) &&
-					assert.Equal(t, expected.Key.StoreStreamID, got.Key.StoreStreamID) &&
-					assert.Equal(t, expected.Key.EventNumber, got.Key.EventNumber) &&
-					assert.Equal(t, expected.Key.EventTime.String(), got.Key.EventTime.String()) &&
-					assert.Equal(t, expected.Key.Content, got.Key.Content)
-			}
-		}
 		newBackoff = func(d time.Duration) func(streamType string, retries int64) time.Duration {
 			return func(streamType string, retries int64) time.Duration {
 				return d
-			}
-		}
-		failAfterWriter = func(after int) func(ctx context.Context, streamType string, events iter.Seq2[es.Event, error]) error {
-			return func(ctx context.Context, streamType string, events iter.Seq2[es.Event, error]) error {
-				count := 0
-				for range events {
-					if count >= after {
-						return errors.New("fail")
-					}
-					count++
-				}
-
-				return nil
 			}
 		}
 
@@ -91,9 +67,6 @@ func TestProcess(t *testing.T) {
 			}
 		}
 	)
-
-	_ = failAfterWriter
-	_ = eventsEqual
 
 	t.Run("fail immediately with the writer", func(t *testing.T) {
 		// arrange
@@ -378,7 +351,9 @@ func TestProcess(t *testing.T) {
 			backoff = newBackoff(time.Millisecond)
 			p       = processor.New(conn, schema, w, rd, backoff)
 
-			stream    = testdata.StreamReference()
+			stream = testdata.StreamReference(func(ref *es.StreamReference) {
+				ref.StreamID = "" // expect empty streamID
+			})
 			watermark = newWatermark(0, 0)
 			events    = testdata.Events(10, func(e *es.Event) {
 				e.StreamType = stream.StreamType

@@ -1,7 +1,6 @@
 package leases
 
 import (
-	"context"
 	"fmt"
 	"math/rand/v2"
 	"strings"
@@ -57,7 +56,7 @@ func (cfg Config) validate() error {
 		return fmt.Errorf("leases: vnode count must be greater than 0")
 	}
 
-	if cfg.VNodeCount >= cfg.Range.Len() {
+	if cfg.VNodeCount > cfg.Range.Len() {
 		return fmt.Errorf("leases: vnode count (%d) must be less than range size (%s)", cfg.VNodeCount, cfg.Range)
 	}
 
@@ -125,7 +124,7 @@ func WithValueListener(listener ValueListener) Option {
 }
 
 func noopValueListener() ValueListenerFunc {
-	return func(ctx context.Context, added, removed []uint32) error {
+	return func(values, added, removed []uint32) error {
 		return nil
 	}
 }

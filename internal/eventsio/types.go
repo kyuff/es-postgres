@@ -15,6 +15,7 @@ type Schema interface {
 	InsertOutbox(ctx context.Context, tx dbtx.DBTX, streamType, streamID, storeStreamID string, eventNumber, watermark int64, partition uint32) (int64, error)
 	UpdateOutbox(ctx context.Context, tx dbtx.DBTX, streamType, streamID string, eventNumber, lastEventNumber int64) (int64, error)
 	SelectEvents(ctx context.Context, db dbtx.DBTX, streamType string, streamID string, eventNumber int64) (pgx.Rows, error)
+	Notify(ctx context.Context, db dbtx.DBTX, partition uint32, payload string) error
 }
 
 type Validator interface {

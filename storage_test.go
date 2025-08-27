@@ -367,6 +367,7 @@ func TestStorage(t *testing.T) {
 			var (
 				storage = newInstance(t,
 					postgres.WithReconcileInterval(time.Millisecond*100),
+					postgres.WithLeaseHeartbeatInterval(time.Millisecond*100),
 				)
 				w = &WriterMock{}
 
@@ -405,7 +406,6 @@ func TestStorage(t *testing.T) {
 				mu.RLock()
 				defer mu.RUnlock()
 
-				fmt.Printf("GOT %d EVENTS\n", len(got))
 				if len(got) < 10 {
 					return errors.New("no events received")
 				}

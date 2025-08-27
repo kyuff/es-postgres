@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"sync"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kyuff/es-postgres/internal/database"
@@ -46,13 +47,18 @@ func InstanceFromPool(pool *pgxpool.Pool) *Instance {
 }
 
 type Instance struct {
-	dsn  string
+	dsn string
+
+	mu   sync.RWMutex
 	pool *pgxpool.Pool
 }
 
 func (i *Instance) isConnector() {}
 
 func (i *Instance) Ping(ctx context.Context) error {
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+
 	if i.pool == nil {
 		var err error
 		i.pool, err = database.Connect(ctx, i.dsn)
@@ -65,29 +71,46 @@ func (i *Instance) Ping(ctx context.Context) error {
 }
 
 func (i *Instance) ApplyMigrations(ctx context.Context, apply func(conn *pgxpool.Conn) error) error {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
 	return i.pool.AcquireFunc(ctx, apply)
 }
 
 func (i *Instance) AcquireWrite(ctx context.Context) (*pgxpool.Conn, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
 	return i.pool.Acquire(ctx)
 }
 
 func (i *Instance) AcquireWriteStream(ctx context.Context, streamType, streamID string) (*pgxpool.Conn, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
 	return i.pool.Acquire(ctx)
 }
 
 func (i *Instance) AcquireRead(ctx context.Context) (*pgxpool.Conn, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
 	return i.pool.Acquire(ctx)
 }
 
 func (i *Instance) AcquireReadStream(ctx context.Context, streamType, streamID string) (*pgxpool.Conn, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
 	return i.pool.Acquire(ctx)
 }
 
 func (i *Instance) Close() error {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
 	if i.pool != nil {
 		i.pool.Close()
-		i.pool = nil
 	}
 
 	return nil

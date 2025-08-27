@@ -71,6 +71,7 @@ func TestEventWriter(t *testing.T) {
 		// assert
 		assert.Error(t, err)
 		assert.Equal(t, 0, len(schema.WriteEventCalls()))
+		assert.Equal(t, 0, len(schema.NotifyCalls()))
 	})
 
 	t.Run("fail on write error", func(t *testing.T) {
@@ -138,6 +139,12 @@ func TestEventWriter(t *testing.T) {
 			return 1, nil
 		}
 
+		schema.NotifyFunc = func(ctx context.Context, db dbtx.DBTX, partition uint32, payload string) error {
+			assert.Equal(t, uint32(1), partition)
+			assert.Truef(t, len(payload) > 1, "payload is '%s'", payload)
+			return nil
+		}
+
 		// act
 		err := w.Write(t.Context(), db, streamType, seqs.Seq2(events...))
 
@@ -146,6 +153,7 @@ func TestEventWriter(t *testing.T) {
 		assert.Equal(t, 10, len(schema.WriteEventCalls()))
 		assert.Equal(t, 1, len(schema.InsertOutboxCalls()))
 		assert.Equal(t, 0, len(schema.UpdateOutboxCalls()))
+		assert.Equal(t, 1, len(schema.NotifyCalls()))
 	})
 
 	t.Run("update followup events on outbox", func(t *testing.T) {
@@ -180,6 +188,12 @@ func TestEventWriter(t *testing.T) {
 			return []byte(`content`), nil
 		}
 
+		schema.NotifyFunc = func(ctx context.Context, db dbtx.DBTX, partition uint32, payload string) error {
+			assert.Equal(t, uint32(1), partition)
+			assert.Truef(t, len(payload) > 1, "payload is '%s'", payload)
+			return nil
+		}
+
 		// act
 		err := w.Write(t.Context(), db, streamType, seqs.Seq2(events[offset:]...))
 
@@ -188,6 +202,8 @@ func TestEventWriter(t *testing.T) {
 		assert.Equal(t, 7, len(schema.WriteEventCalls()))
 		assert.Equal(t, 0, len(schema.InsertOutboxCalls()))
 		assert.Equal(t, 1, len(schema.UpdateOutboxCalls()))
+		assert.Equal(t, 1, len(schema.NotifyCalls()))
+
 	})
 
 	t.Run("fail if update effects none", func(t *testing.T) {

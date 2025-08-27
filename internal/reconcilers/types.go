@@ -15,10 +15,13 @@ type Valuer interface {
 
 type Connector interface {
 	AcquireRead(ctx context.Context) (*pgxpool.Conn, error)
+	AcquireWrite(ctx context.Context) (*pgxpool.Conn, error)
 }
 
 type Schema interface {
 	SelectOutboxStreamIDs(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]es.StreamReference, error)
+	Listen(ctx context.Context, db dbtx.DBTX, partitions []uint32) error
+	Unlisten(ctx context.Context, db dbtx.DBTX, partitions []uint32) error
 }
 
 type Logger interface {
