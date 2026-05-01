@@ -105,6 +105,3 @@ func (w *Writer) Write(ctx context.Context, db dbtx.DBTX, streamType string, eve
 	return nil
 }
 
-func channelName(prefix string, partition uint32) string {
-	return ""
-}

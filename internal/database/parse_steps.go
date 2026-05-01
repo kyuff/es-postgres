@@ -1,13 +1,12 @@
 package database
 
 import (
-	"bytes"
 	"crypto/sha512"
 	"fmt"
 	"io/fs"
+	"path"
 	"slices"
 	"strconv"
-	"text/template"
 )
 
 type step struct {
@@ -15,52 +14,35 @@ type step struct {
 	fileName string
 	ddl      string
 }
-type inputParams struct {
-	Prefix string
-}
 
 func (s step) Hash() string {
 	return fmt.Sprintf("%x", sha512.Sum512([]byte(s.ddl)))
 }
 
-func parseSteps(fileSystem fs.FS, prefix string) ([]step, error) {
-	archive, err := template.ParseFS(fileSystem, "**/*.tmpl")
+func parseSteps(fileSystem fs.FS) ([]step, error) {
+	entries, err := fs.Glob(fileSystem, "migrations/*.sql")
 	if err != nil {
 		return nil, err
 	}
 
-	templates := archive.Templates()
-	slices.SortFunc(templates, func(a, b *template.Template) int {
-		if a.Name() < b.Name() {
-			return -1
-		}
-		if a.Name() > b.Name() {
-			return 1
-		}
+	slices.Sort(entries)
 
-		return 0
-	})
-
-	var params = inputParams{
-		Prefix: prefix,
-	}
 	var migrations []step
-	for _, t := range templates {
-		var buf bytes.Buffer
-		err := t.Execute(&buf, params)
+	for _, entry := range entries {
+		data, err := fs.ReadFile(fileSystem, entry)
 		if err != nil {
 			return nil, err
 		}
 
-		version, err := extractVersionNumber(t.Name())
+		version, err := extractVersionNumber(path.Base(entry))
 		if err != nil {
 			return nil, err
 		}
 
 		migrations = append(migrations, step{
 			version:  version,
-			fileName: t.Name(),
-			ddl:      buf.String(),
+			fileName: entry,
+			ddl:      string(data),
 		})
 	}
 

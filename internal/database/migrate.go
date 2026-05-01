@@ -2,24 +2,21 @@ package database
 
 import (
 	"context"
-	"embed"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"time"
 
 	"github.com/kyuff/es-postgres/internal/dbtx"
 )
 
-//go:embed migrations/*.tmpl
-var migrations embed.FS
-
-func Migrate(ctx context.Context, db dbtx.DBTX, schema *Schema) error {
-	migrations, err := parseSteps(migrations, schema.Prefix)
+func Migrate(ctx context.Context, db dbtx.DBTX, schema *Schema, migrations fs.FS) error {
+	steps, err := parseSteps(migrations)
 	if err != nil {
 		return err
 	}
 
-	pid := calculateProcessID(schema.Prefix)
+	pid := calculateProcessID("es_postgres_migration")
 	err = schema.AdvisoryLock(ctx, db, pid)
 	if err != nil {
 		return err
@@ -43,33 +40,32 @@ func Migrate(ctx context.Context, db dbtx.DBTX, schema *Schema) error {
 		return err
 	}
 
-	// first check that current version is <= the last of the available migrations. If not, something's seriously wrong
 	var highestVersion uint32
-	for _, migration := range migrations {
-		if migration.version > highestVersion {
-			highestVersion = migration.version
+	for _, step := range steps {
+		if step.version > highestVersion {
+			highestVersion = step.version
 		}
 	}
 	if highestVersion < currentVersion {
 		return fmt.Errorf("[es/postgres] Version mismatch: current (%d) > highest (%d)", currentVersion, highestVersion)
 	}
 
-	for _, migration := range migrations {
-		if migration.version <= currentVersion {
+	for _, step := range steps {
+		if step.version <= currentVersion {
 			continue
 		}
 
-		_, err = db.Exec(ctx, migration.ddl)
+		_, err = db.Exec(ctx, step.ddl)
 		if err != nil {
 			return err
 		}
 
-		err = schema.InsertMigrationRow(ctx, db, migration.version, migration.fileName, migration.Hash())
+		err = schema.InsertMigrationRow(ctx, db, step.version, step.fileName, step.Hash())
 		if err != nil {
 			return err
 		}
 
-		currentVersion = migration.version
+		currentVersion = step.version
 	}
 
 	return nil

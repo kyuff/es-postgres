@@ -40,23 +40,27 @@ func New(connector Connector, opts ...Option) (*Storage, error) {
 		return nil, err
 	}
 
-	schema, err := database.NewSchema(cfg.tablePrefix)
+	notifyPrefix, err := resolveNotifyPrefix(ctx, connector, cfg)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[es/postgres] failed to resolve notify prefix: %w", err)
 	}
 
-	err = connector.ApplyMigrations(ctx, func(conn *pgxpool.Conn) error {
-		err := database.Migrate(ctx, conn, schema)
-		if err != nil {
-			cfg.logger.ErrorfCtx(ctx, "[es/postgres] Database migration failed for %q: %s", database.ToDSN(conn), err)
-			return err
-		}
+	schema := database.NewSchema(notifyPrefix)
 
-		cfg.logger.InfofCtx(ctx, "[es/postgres] Database migrated %q", database.ToDSN(conn))
-		return nil
-	})
-	if err != nil {
-		return nil, err
+	if cfg.autoMigrate {
+		err = connector.ApplyMigrations(ctx, func(conn *pgxpool.Conn) error {
+			err := database.Migrate(ctx, conn, schema, DDL)
+			if err != nil {
+				cfg.logger.ErrorfCtx(ctx, "[es/postgres] Database migration failed for %q: %s", database.ToDSN(conn), err)
+				return err
+			}
+
+			cfg.logger.InfofCtx(ctx, "[es/postgres] Database migrated %q", database.ToDSN(conn))
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var recons []reconcilers.Reconciler
@@ -92,6 +96,20 @@ func New(connector Connector, opts ...Option) (*Storage, error) {
 		writer:     eventsio.NewWriter(schema, eventsio.NewValidator(), cfg.codec, cfg.partitioner),
 		reconciles: recons,
 	}, nil
+}
+
+func resolveNotifyPrefix(ctx context.Context, connector Connector, cfg *Config) (string, error) {
+	if cfg.notifyPrefix != "" {
+		return cfg.notifyPrefix, nil
+	}
+
+	conn, err := connector.AcquireRead(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer conn.Release()
+
+	return database.CurrentSchema(ctx, conn)
 }
 
 var _ es.Storage = (*Storage)(nil)
