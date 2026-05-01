@@ -1,21 +1,19 @@
 services:
   postgres:
-    image: postgres:18beta2-alpine
-    container_name: postgres_es
+    image: postgres:17-alpine
     environment:
-      POSTGRES_USER: es
-      POSTGRES_PASSWORD: es
-      POSTGRES_DB: es
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     ports:
-      - "5430:5432"
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U es" ]
-      interval: 5s
-      timeout: 2s
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 5s
       retries: 10
 
 volumes:
   postgres_data:
+    name: kyuff_postgres_data

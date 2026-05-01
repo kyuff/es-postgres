@@ -1,4 +1,6 @@
 
+export COMPOSE_PROJECT_NAME = kyuff
+
 test:
 	go test ./... -count 1 -race
 
@@ -21,10 +23,10 @@ plantuml:
 	plantuml docs/*.pu
 
 up:
-	docker compose up -d --wait
+	docker compose up postgres -d --wait
+	docker compose exec postgres psql -U postgres -c "CREATE DATABASE es" 2>/dev/null || true
 
 down:
 	docker compose down --remove-orphans --volumes
 
 restart: down up
-
