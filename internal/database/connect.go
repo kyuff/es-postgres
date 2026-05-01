@@ -38,7 +38,7 @@ func Connect(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 func DSNTest(t *testing.T) string {
 	t.Helper()
 	var name = nameSchema(t.Name())
-	dsn := fmt.Sprintf("postgres://es:es@localhost:5430/es?sslmode=disable&search_path=%s", name)
+	dsn := fmt.Sprintf("postgres://postgres:postgres@localhost:5432/es?sslmode=disable&search_path=%s", name)
 
 	pool, err := Connect(t.Context(), dsn)
 	if !assert.NoError(t, err) {
