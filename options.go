@@ -3,9 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
-	"regexp"
 	"time"
 
 	"github.com/kyuff/es-postgres/backoff"
@@ -22,7 +20,8 @@ const (
 type Config struct {
 	logger              Logger
 	startCtx            func() context.Context
-	tablePrefix         string
+	autoMigrate         bool
+	notifyPrefix        string
 	codec               codec
 	partitioner         func(streamType, streamID string) uint32
 	listenPublishing    bool
@@ -36,10 +35,9 @@ type Config struct {
 
 func defaultOptions() *Config {
 	return applyOptions(&Config{},
-		// add default options here
 		WithNoopLogger(),
 		WithStartContext(context.Background()),
-		WithTablePrefix("es"),
+		WithAutoMigrate(true),
 		withJsonCodec(),
 		WithReconcileInterval(time.Second*10),
 		WithReconcileTimeout(time.Second*5),
@@ -53,8 +51,6 @@ func defaultOptions() *Config {
 
 }
 
-var tablePrefixRE = regexp.MustCompile(`^[a-z][a-z0-9]{1,20}$`)
-
 func (c *Config) validate() error {
 	if c.logger == nil {
 		return errors.New("missing logger")
@@ -62,10 +58,6 @@ func (c *Config) validate() error {
 
 	if c.startCtx == nil {
 		return errors.New("missing start context")
-	}
-
-	if !tablePrefixRE.MatchString(c.tablePrefix) {
-		return fmt.Errorf("invalid table prefix %q, must match: %s", c.tablePrefix, tablePrefixRE.String())
 	}
 
 	if c.codec == nil {
@@ -125,13 +117,21 @@ func WithStartContext(ctx context.Context) Option {
 	}
 }
 
-// WithTablePrefix uses the given prefix for the database tables
-// that this library creates.
-// Table names will have the form "{prefix}_{name}".
-// Example: "es_migrations"
-func WithTablePrefix(prefix string) Option {
+// WithAutoMigrate controls whether the library runs DDL migrations automatically on startup.
+// Set to false when migrations are managed externally using the DDL embed.FS.
+// Defaults to true.
+func WithAutoMigrate(enabled bool) Option {
 	return func(cfg *Config) {
-		cfg.tablePrefix = prefix
+		cfg.autoMigrate = enabled
+	}
+}
+
+// WithNotifyPrefix sets the prefix used for PostgreSQL NOTIFY/LISTEN channel names.
+// Channel names take the form "{prefix}_es_{partition}".
+// When unset, the prefix is derived from current_schema() at startup.
+func WithNotifyPrefix(prefix string) Option {
+	return func(cfg *Config) {
+		cfg.notifyPrefix = prefix
 	}
 }
 

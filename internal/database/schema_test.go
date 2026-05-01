@@ -2,6 +2,7 @@ package database_test
 
 import (
 	"encoding/json"
+	"os"
 	"testing"
 	"time"
 
@@ -25,11 +26,8 @@ func TestSchema(t *testing.T) {
 			if !assert.NoError(t, err) {
 				t.FailNow()
 			}
-			schema, err := database.NewSchema("es")
-			if !assert.NoError(t, err) {
-				t.FailNow()
-			}
-			err = database.Migrate(t.Context(), pool, schema)
+			schema := database.NewSchema("es")
+			err = database.Migrate(t.Context(), pool, schema, os.DirFS("../../"))
 			if !assert.NoError(t, err) {
 				t.FailNow()
 			}

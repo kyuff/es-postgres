@@ -2,6 +2,7 @@ package reconcilers_test
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -43,11 +44,8 @@ func TestNewListener(t *testing.T) {
 				t.FailNow()
 			}
 			t.Cleanup(pool.Close)
-			schema, err := database.NewSchema("es")
-			if !assert.NoError(t, err) {
-				t.FailNow()
-			}
-			err = database.Migrate(t.Context(), pool, schema)
+			schema := database.NewSchema("es")
+			err = database.Migrate(t.Context(), pool, schema, os.DirFS("../../"))
 			if !assert.NoError(t, err) {
 				t.FailNow()
 			}

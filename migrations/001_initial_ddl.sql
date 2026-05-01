@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS {{ .Prefix }}_events
+CREATE TABLE IF NOT EXISTS es_events
 (
     stream_type     VARCHAR                     NOT NULL,
     stream_id       VARCHAR                     NOT NULL,
@@ -10,11 +10,11 @@ CREATE TABLE IF NOT EXISTS {{ .Prefix }}_events
     content         jsonb                       NOT NULL,
     metadata        jsonb                       NOT NULL,
 
-    CONSTRAINT {{ .Prefix }}_events_pkey
+    CONSTRAINT es_events_pkey
         PRIMARY KEY (stream_type, stream_id, event_number)
 );
 
-CREATE TABLE IF NOT EXISTS {{ .Prefix }}_outbox
+CREATE TABLE IF NOT EXISTS es_outbox
 (
     stream_type       VARCHAR     NOT NULL,
     stream_id         VARCHAR     NOT NULL,
@@ -27,19 +27,19 @@ CREATE TABLE IF NOT EXISTS {{ .Prefix }}_outbox
     PRIMARY KEY (stream_type, stream_id)
 );
 
-CREATE INDEX IF NOT EXISTS {{ .Prefix }}_outbox_process_at_partition_index
-    ON {{ .Prefix }}_outbox (process_at, partition, stream_type)
+CREATE INDEX IF NOT EXISTS es_outbox_process_at_partition_index
+    ON es_outbox (process_at, partition, stream_type)
     WHERE watermark <> event_number;
 
-CREATE INDEX IF NOT EXISTS {{ .Prefix }}_outbox_stream_type_index
-    ON {{ .Prefix }}_outbox (stream_type)
+CREATE INDEX IF NOT EXISTS es_outbox_stream_type_index
+    ON es_outbox (stream_type)
     INCLUDE (watermark, event_number)
     WHERE watermark <> event_number;
 
-CREATE INDEX IF NOT EXISTS {{ .Prefix }}_outbox_store_stream_id_index
-ON {{ .Prefix }}_outbox (store_stream_id, stream_type);
+CREATE INDEX IF NOT EXISTS es_outbox_store_stream_id_index
+ON es_outbox (store_stream_id, stream_type);
 
-CREATE TABLE IF NOT EXISTS {{ .Prefix }}_leases
+CREATE TABLE IF NOT EXISTS es_leases
 (
     vnode             INTEGER     NOT NULL, -- vnode position on the hash ring
     node_name         VARCHAR     NOT NULL, -- name of the lease owner

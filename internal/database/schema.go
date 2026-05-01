@@ -3,7 +3,6 @@ package database
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -14,76 +13,22 @@ import (
 	"github.com/kyuff/es-postgres/internal/uuid"
 )
 
-var once sync.Once
-var sql = sqlQueries{}
-
-type sqlQueries struct {
-	selectCurrentMigration string
-	advisoryLock           string
-	advisoryUnlock         string
-	createMigrationTable   string
-	insertMigrationRow     string
-	selectEvents           string
-	writeEvent             string
-	insertOutbox           string
-	updateOutbox           string
-	selectStreamReferences string
-	selectOutboxStreamIDs  string
-	selectOutboxWatermark  string
-	updateOutboxWatermark  string
-	evacuateLeases         string
-	updateLeases           string
-	selectLeases           string
-	approveLease           string
-	insertLease            string
-}
-
-func NewSchema(prefix string) (*Schema, error) {
-	var err error
-	once.Do(func() {
-		err = renderTemplates(prefix,
-			&sql.selectCurrentMigration,
-			&sql.advisoryLock,
-			&sql.advisoryUnlock,
-			&sql.createMigrationTable,
-			&sql.insertMigrationRow,
-			&sql.selectEvents,
-			&sql.writeEvent,
-			&sql.insertOutbox,
-			&sql.updateOutbox,
-			&sql.selectStreamReferences,
-			&sql.selectOutboxStreamIDs,
-			&sql.selectOutboxWatermark,
-			&sql.updateOutboxWatermark,
-			&sql.evacuateLeases,
-			&sql.updateLeases,
-			&sql.selectLeases,
-			&sql.approveLease,
-			&sql.insertLease,
-		)
-	})
-	if err != nil {
-		return nil, err
-	}
-
+func NewSchema(notifyPrefix string) *Schema {
 	return &Schema{
-		Prefix: prefix,
-	}, nil
+		notifyPrefix: notifyPrefix,
+	}
 }
 
 type Schema struct {
-	Prefix string
-}
-
-func init() {
-	sql.selectCurrentMigration = `
-SELECT COALESCE(MAX(version), 0)
-FROM {{ .Prefix }}_migrations;
-`
+	notifyPrefix string
 }
 
 func (s *Schema) SelectCurrentMigration(ctx context.Context, db dbtx.DBTX) (uint32, error) {
-	row := db.QueryRow(ctx, sql.selectCurrentMigration)
+	const q = `
+SELECT COALESCE(MAX(version), 0)
+FROM es_migrations;
+`
+	row := db.QueryRow(ctx, q)
 	var current uint32
 	err := row.Scan(&current)
 	if err != nil {
@@ -93,12 +38,8 @@ func (s *Schema) SelectCurrentMigration(ctx context.Context, db dbtx.DBTX) (uint
 	return current, nil
 }
 
-func init() {
-	sql.advisoryLock = "SELECT pg_advisory_lock($1);"
-}
-
 func (s *Schema) AdvisoryLock(ctx context.Context, db dbtx.DBTX, pid int) error {
-	_, err := db.Exec(ctx, sql.advisoryLock, pid)
+	_, err := db.Exec(ctx, "SELECT pg_advisory_lock($1);", pid)
 	if err != nil {
 		return fmt.Errorf("advisory lock %d failed: %w", pid, err)
 	}
@@ -106,12 +47,8 @@ func (s *Schema) AdvisoryLock(ctx context.Context, db dbtx.DBTX, pid int) error 
 	return nil
 }
 
-func init() {
-	sql.advisoryUnlock = "SELECT pg_advisory_unlock($1);"
-}
-
 func (s *Schema) AdvisoryUnlock(ctx context.Context, db dbtx.DBTX, pid int) error {
-	_, err := db.Exec(ctx, sql.advisoryUnlock, pid)
+	_, err := db.Exec(ctx, "SELECT pg_advisory_unlock($1);", pid)
 	if err != nil {
 		return fmt.Errorf("advisory unlock %d failed: %w", pid, err)
 	}
@@ -119,21 +56,18 @@ func (s *Schema) AdvisoryUnlock(ctx context.Context, db dbtx.DBTX, pid int) erro
 	return nil
 }
 
-func init() {
-	sql.createMigrationTable = `
-CREATE TABLE IF NOT EXISTS {{ .Prefix }}_migrations
+func (s *Schema) CreateMigrationTable(ctx context.Context, db dbtx.DBTX) error {
+	const q = `
+CREATE TABLE IF NOT EXISTS es_migrations
 (
     version     BIGINT                      NOT NULL,
     name        VARCHAR                     NOT NULL,
     hash        VARCHAR                     NOT NULL,
     applied     timestamptz DEFAULT NOW()   NOT NULL,
-    CONSTRAINT {{ .Prefix }}_migrations_pkey PRIMARY KEY (version)
+    CONSTRAINT es_migrations_pkey PRIMARY KEY (version)
 );
 `
-}
-
-func (s *Schema) CreateMigrationTable(ctx context.Context, db dbtx.DBTX) error {
-	_, err := db.Exec(ctx, sql.createMigrationTable)
+	_, err := db.Exec(ctx, q)
 	if err != nil {
 		return fmt.Errorf("create migration Table failed: %w", err)
 	}
@@ -141,16 +75,13 @@ func (s *Schema) CreateMigrationTable(ctx context.Context, db dbtx.DBTX) error {
 	return nil
 }
 
-func init() {
-	sql.insertMigrationRow = `
-INSERT INTO {{ .Prefix }}_migrations (version, name, hash)
+func (s *Schema) InsertMigrationRow(ctx context.Context, db dbtx.DBTX, version uint32, name string, hash string) error {
+	const q = `
+INSERT INTO es_migrations (version, name, hash)
 VALUES ($1, $2, $3)
 ON CONFLICT DO NOTHING;
 `
-}
-
-func (s *Schema) InsertMigrationRow(ctx context.Context, db dbtx.DBTX, version uint32, name string, hash string) error {
-	_, err := db.Exec(ctx, sql.insertMigrationRow, version, name, hash)
+	_, err := db.Exec(ctx, q, version, name, hash)
 	if err != nil {
 		return fmt.Errorf("insert Migration row failed: %w", err)
 	}
@@ -158,8 +89,8 @@ func (s *Schema) InsertMigrationRow(ctx context.Context, db dbtx.DBTX, version u
 	return nil
 }
 
-func init() {
-	sql.selectEvents = `
+func (s *Schema) SelectEvents(ctx context.Context, db dbtx.DBTX, streamType string, streamID string, eventNumber int64) (pgx.Rows, error) {
+	const q = `
 SELECT  stream_type,
         stream_id,
 		event_number,
@@ -169,22 +100,19 @@ SELECT  stream_type,
 		content_name,
 		content,
 		metadata
-FROM {{ .Prefix }}_events
-WHERE 
+FROM es_events
+WHERE
         stream_type = $1
     AND stream_id = $2
     AND event_number > $3
 ORDER BY event_number ASC
 `
+	return db.Query(ctx, q, streamType, streamID, eventNumber)
 }
 
-func (s *Schema) SelectEvents(ctx context.Context, db dbtx.DBTX, streamType string, streamID string, eventNumber int64) (pgx.Rows, error) {
-	return db.Query(ctx, sql.selectEvents, streamType, streamID, eventNumber)
-}
-
-func init() {
-	sql.writeEvent = `
-INSERT INTO {{ .Prefix }}_events (
+func (s *Schema) WriteEvent(ctx context.Context, db dbtx.DBTX, event es.Event, content []byte, metadata []byte) error {
+	const q = `
+INSERT INTO es_events (
                                 stream_type,
                                 stream_id,
                                 event_number,
@@ -195,10 +123,7 @@ INSERT INTO {{ .Prefix }}_events (
                                 content,
                                 metadata
                             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9);`
-}
-
-func (s *Schema) WriteEvent(ctx context.Context, db dbtx.DBTX, event es.Event, content []byte, metadata []byte) error {
-	_, err := db.Exec(ctx, sql.writeEvent,
+	_, err := db.Exec(ctx, q,
 		event.StreamType,
 		event.StreamID,
 		event.EventNumber,
@@ -212,9 +137,9 @@ func (s *Schema) WriteEvent(ctx context.Context, db dbtx.DBTX, event es.Event, c
 	return err
 }
 
-func init() {
-	sql.insertOutbox = `
-INSERT INTO {{ .Prefix }}_outbox (
+func (s *Schema) InsertOutbox(ctx context.Context, tx dbtx.DBTX, streamType, streamID, storeStreamID string, eventNumber, watermark int64, partition uint32) (int64, error) {
+	const q = `
+INSERT INTO es_outbox (
 	stream_type,
 	stream_id,
 	store_stream_id,
@@ -223,10 +148,7 @@ INSERT INTO {{ .Prefix }}_outbox (
 	partition
 ) VALUES ($1,$2,$3,$4,$5,$6);
 `
-}
-
-func (s *Schema) InsertOutbox(ctx context.Context, tx dbtx.DBTX, streamType, streamID, storeStreamID string, eventNumber, watermark int64, partition uint32) (int64, error) {
-	affected, err := tx.Exec(ctx, sql.insertOutbox,
+	affected, err := tx.Exec(ctx, q,
 		streamType,
 		streamID,
 		storeStreamID,
@@ -241,18 +163,15 @@ func (s *Schema) InsertOutbox(ctx context.Context, tx dbtx.DBTX, streamType, str
 	return affected.RowsAffected(), nil
 }
 
-func init() {
-	sql.updateOutbox = `
-UPDATE {{ .Prefix }}_outbox
+func (s *Schema) UpdateOutbox(ctx context.Context, tx dbtx.DBTX, streamType, streamID string, eventNumber, lastEventNumber int64) (int64, error) {
+	const q = `
+UPDATE es_outbox
 SET event_number = $3
 WHERE stream_type = $1
   AND stream_id = $2
   AND event_number = $4
 `
-}
-
-func (s *Schema) UpdateOutbox(ctx context.Context, tx dbtx.DBTX, streamType, streamID string, eventNumber, lastEventNumber int64) (int64, error) {
-	affected, err := tx.Exec(ctx, sql.updateOutbox, streamType, streamID, eventNumber, lastEventNumber)
+	affected, err := tx.Exec(ctx, q, streamType, streamID, eventNumber, lastEventNumber)
 	if err != nil {
 		return 0, err
 	}
@@ -260,41 +179,35 @@ func (s *Schema) UpdateOutbox(ctx context.Context, tx dbtx.DBTX, streamType, str
 	return affected.RowsAffected(), nil
 }
 
-func init() {
-	sql.selectStreamReferences = `
+func (s *Schema) SelectStreamReferences(ctx context.Context, db dbtx.DBTX, streamType string, token string, limit int64) (pgx.Rows, error) {
+	const q = `
 SELECT stream_type, stream_id, store_stream_id
-FROM {{ .Prefix }}_outbox
+FROM es_outbox
 WHERE store_stream_id > $1
   AND stream_type = $2
 ORDER BY store_stream_id ASC
 LIMIT $3;`
+	return db.Query(ctx, q, token, streamType, limit)
 }
 
-func (s *Schema) SelectStreamReferences(ctx context.Context, db dbtx.DBTX, streamType string, token string, limit int64) (pgx.Rows, error) {
-	return db.Query(ctx, sql.selectStreamReferences, token, streamType, limit)
-}
-
-func init() {
-	sql.selectOutboxStreamIDs = `
+func (s *Schema) SelectOutboxStreamIDs(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]es.StreamReference, error) {
+	const q = `
 SELECT stream_type,
        stream_id,
        store_stream_id
-FROM {{ .Prefix }}_outbox
+FROM es_outbox
 WHERE
-	 watermark <> event_number 
+	 watermark <> event_number
  AND partition = ANY ($1)
  AND store_stream_id > $2
  AND process_at <= $3
 ORDER BY store_stream_id
-LIMIT $4    
+LIMIT $4
 `
-}
-
-func (s *Schema) SelectOutboxStreamIDs(ctx context.Context, db dbtx.DBTX, graceWindow time.Duration, partitions []uint32, token string, limit int) ([]es.StreamReference, error) {
 	if token == "" {
 		token = uuid.Empty
 	}
-	rows, err := db.Query(ctx, sql.selectOutboxStreamIDs,
+	rows, err := db.Query(ctx, q,
 		partitions,
 		token,
 		time.Now().Add(-graceWindow),
@@ -318,22 +231,20 @@ func (s *Schema) SelectOutboxStreamIDs(ctx context.Context, db dbtx.DBTX, graceW
 	return result, nil
 }
 
-func init() {
-	sql.selectOutboxWatermark = `
-SELECT 
+func (s *Schema) SelectOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream es.StreamReference) (OutboxWatermark, int64, error) {
+	const q = `
+SELECT
     stream_id,
 	event_number,
 	watermark,
 	retry_count
-FROM {{ .Prefix }}_outbox
+FROM es_outbox
 WHERE
     stream_type = $1
 AND store_stream_id = $2;
 `
-}
-func (s *Schema) SelectOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream es.StreamReference) (OutboxWatermark, int64, error) {
 	var (
-		row         = db.QueryRow(ctx, sql.selectOutboxWatermark, stream.StreamType, stream.StoreStreamID)
+		row         = db.QueryRow(ctx, q, stream.StreamType, stream.StoreStreamID)
 		w           OutboxWatermark
 		eventNumber int64
 	)
@@ -342,19 +253,17 @@ func (s *Schema) SelectOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream
 	return w, eventNumber, err
 }
 
-func init() {
-	sql.updateOutboxWatermark = `
-UPDATE {{ .Prefix }}_outbox
-SET 
+func (s *Schema) UpdateOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream es.StreamReference, delay time.Duration, watermark OutboxWatermark) error {
+	const q = `
+UPDATE es_outbox
+SET
 	watermark = $4,
     retry_count = $5,
     process_at = $3
 WHERE stream_type = $1
   AND store_stream_id = $2
 `
-}
-func (s *Schema) UpdateOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream es.StreamReference, delay time.Duration, watermark OutboxWatermark) error {
-	tag, err := db.Exec(ctx, sql.updateOutboxWatermark,
+	tag, err := db.Exec(ctx, q,
 		stream.StreamType,
 		stream.StoreStreamID,
 		time.Now().Add(delay),
@@ -371,32 +280,24 @@ func (s *Schema) UpdateOutboxWatermark(ctx context.Context, db dbtx.DBTX, stream
 	return err
 }
 
-func init() {
-	sql.evacuateLeases = `
-DELETE FROM {{ .Prefix }}_leases WHERE ttl < NOW()
-`
-	sql.updateLeases = `
-UPDATE {{ .Prefix }}_leases SET ttl = NOW() + $2::interval WHERE node_name = $1
-`
-	sql.selectLeases = `
-SELECT vnode, node_name, ttl > NOW() AS valid, status
-FROM {{ .Prefix }}_leases
-ORDER BY vnode ASC;
-
-`
-}
-
 func (s *Schema) RefreshLeases(ctx context.Context, db dbtx.DBTX, nodeName string, ttl time.Duration) (leases.Ring, error) {
-	_, err := db.Exec(ctx, sql.evacuateLeases)
+	const evacuate = `DELETE FROM es_leases WHERE ttl < NOW()`
+	const update = `UPDATE es_leases SET ttl = NOW() + $2::interval WHERE node_name = $1`
+	const sel = `
+SELECT vnode, node_name, ttl > NOW() AS valid, status
+FROM es_leases
+ORDER BY vnode ASC;
+`
+	_, err := db.Exec(ctx, evacuate)
 	if err != nil {
 		return nil, err
 	}
-	_, err = db.Exec(ctx, sql.updateLeases, nodeName, rfc8601.Format(ttl))
+	_, err = db.Exec(ctx, update, nodeName, rfc8601.Format(ttl))
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := db.Query(ctx, sql.selectLeases)
+	rows, err := db.Query(ctx, sel)
 	if err != nil {
 		return nil, err
 	}
@@ -420,18 +321,15 @@ func (s *Schema) RefreshLeases(ctx context.Context, db dbtx.DBTX, nodeName strin
 	return ring, nil
 }
 
-func init() {
-	sql.approveLease = `
-UPDATE {{ .Prefix }}_leases
+func (s *Schema) ApproveLease(ctx context.Context, db dbtx.DBTX, vnodes []uint32) error {
+	const q = `
+UPDATE es_leases
 SET
   status = $2
 WHERE
   vnode = ANY ($1);
 `
-}
-
-func (s *Schema) ApproveLease(ctx context.Context, db dbtx.DBTX, vnodes []uint32) error {
-	tag, err := db.Exec(ctx, sql.approveLease, vnodes, leases.Leased)
+	tag, err := db.Exec(ctx, q, vnodes, leases.Leased)
 	if err != nil {
 		return err
 	}
@@ -443,20 +341,18 @@ func (s *Schema) ApproveLease(ctx context.Context, db dbtx.DBTX, vnodes []uint32
 	return nil
 }
 
-func init() {
-	sql.insertLease = `
-INSERT INTO {{ .Prefix }}_leases
+func (s *Schema) InsertLease(ctx context.Context, db dbtx.DBTX, vnode uint32, name string, ttl time.Duration, status string) error {
+	const q = `
+INSERT INTO es_leases
 (vnode, node_name, ttl, status)
 VALUES ($1, $2, NOW() + $3::interval, $4);
 `
-}
-func (s *Schema) InsertLease(ctx context.Context, db dbtx.DBTX, vnode uint32, name string, ttl time.Duration, status string) error {
-	_, err := db.Exec(ctx, sql.insertLease, vnode, name, rfc8601.Format(ttl), status)
+	_, err := db.Exec(ctx, q, vnode, name, rfc8601.Format(ttl), status)
 	return err
 }
 
 func (s *Schema) Notify(ctx context.Context, db dbtx.DBTX, partition uint32, payload string) error {
-	query := fmt.Sprintf("NOTIFY %s, '%s'", channelName(s.Prefix, partition), payload)
+	query := fmt.Sprintf("NOTIFY %s, '%s'", s.channelName(partition), payload)
 	_, err := db.Exec(ctx, query)
 	return err
 }
@@ -467,7 +363,7 @@ func (s *Schema) Listen(ctx context.Context, db dbtx.DBTX, partitions []uint32) 
 	}
 
 	for _, partition := range partitions {
-		_, err := db.Exec(ctx, "LISTEN "+channelName(s.Prefix, partition))
+		_, err := db.Exec(ctx, "LISTEN "+s.channelName(partition))
 		if err != nil {
 			return err
 		}
@@ -482,7 +378,7 @@ func (s *Schema) Unlisten(ctx context.Context, db dbtx.DBTX, partitions []uint32
 	}
 
 	for _, partition := range partitions {
-		_, err := db.Exec(ctx, "UNLISTEN "+channelName(s.Prefix, partition))
+		_, err := db.Exec(ctx, "UNLISTEN "+s.channelName(partition))
 		if err != nil {
 			return err
 		}
@@ -491,6 +387,6 @@ func (s *Schema) Unlisten(ctx context.Context, db dbtx.DBTX, partitions []uint32
 	return nil
 }
 
-func channelName(prefix string, partition uint32) string {
-	return fmt.Sprintf("%s_%d", prefix, partition)
+func (s *Schema) channelName(partition uint32) string {
+	return fmt.Sprintf("%s_es_%d", s.notifyPrefix, partition)
 }
