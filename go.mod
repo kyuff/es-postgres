@@ -3,7 +3,7 @@ module github.com/kyuff/es-postgres
 go 1.25.0
 
 require (
-	github.com/gofrs/uuid/v5 v5.4.0
+	github.com/gofrs/uuid/v5 v5.5.1
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/kyuff/es v0.0.0-20250817183709-fa7628ac82b1
 	golang.org/x/sync v0.20.0
